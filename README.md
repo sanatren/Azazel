@@ -6,7 +6,7 @@ TurboFusion is your AI toolkit of choice that elevates GPT-3.5 Turbo to the next
 
 ## Why TurboFusion?
 
- Advanced Image Analysis: Leverage GPT-4o vision capabilities to analyze and interpret images, extracting meaningful insights and answering complex visual queries.
+Advanced Image Analysis: Leverage GPT-4o-mini vision capabilities to analyze and interpret images, extracting meaningful insights and answering complex visual queries.
 
 Intelligent Code Execution: Execute Python code securely in real-time, with detailed explanations and debugging support for programming tasks.
 
