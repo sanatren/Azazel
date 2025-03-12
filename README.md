@@ -1,4 +1,4 @@
-### TurboFusion
+# TurboFusion
 
 Supercharging GPT-3.5 Turbo with multimodal superpowers 
 
@@ -33,7 +33,7 @@ LangChain (RAG + memory)
 
 Streamlit (sleek UI)
 
-# Future updates
+### Future updates
 
 Sentiment analysis for mood-aware responses
 
