@@ -40,8 +40,6 @@ Streamlit (sleek UI)
 ### Future updates
 
 
-Text-to-voice for hands-free interaction
-
 Personality modes according to user
 
 
