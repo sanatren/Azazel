@@ -22,6 +22,8 @@ Contextual Memory: Maintains conversation context across sessions, enabling cohe
 
 Model switching: Can change model according user needs for more complex or lightweight tasks (GPT-4 ↔ GPT-4o ↔ GPT-4o-mini ).
 
+Sentiment analysis: for mood-aware responses.
+
 
 ## Built With
 
@@ -36,9 +38,6 @@ LangChain (RAG + memory)
 Streamlit (sleek UI)
 
 ### Future updates
-
-Sentiment analysis for mood-aware responses
-
 
 
 Text-to-voice for hands-free interaction
