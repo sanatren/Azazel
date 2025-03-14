@@ -23,9 +23,15 @@ class ProgrammingAssistant:
         
         # Create the prompt template for code generation
         self.code_generation_template = PromptTemplate(
-            input_variables=["question", "chat_history"],
+            input_variables=["question", "chat_history", "language", "personality"],
             template="""
+            {personality}
+            
+            You MUST embody the personality described above in ALL your explanations, while maintaining technical accuracy in code.
+            
             You are an AI programming assistant specialized in Python. Your task is to help users with programming questions by generating and executing code.
+            
+            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
             
             Previous conversation:
             ---------------------
@@ -42,15 +48,15 @@ class ProgrammingAssistant:
             Format your response as follows:
             
             ```explanation
-            [Your explanation of the approach here]
+            [Your explanation of the approach here - MUST reflect your personality]
             ```
             
             ```python
-            [Your Python code here]
+            [Your Python code here - this remains technically accurate regardless of personality]
             ```
             
             ```explanation
-            [Additional explanation or expected output here]
+            [Additional explanation or expected output here - MUST reflect your personality]
             ```
             
             IMPORTANT GUIDELINES:
@@ -59,6 +65,10 @@ class ProgrammingAssistant:
             - Keep the code simple and focused on solving the specific problem
             - Ensure the code is complete and ready to execute
             - If the question is not a programming question, just provide a helpful response without code
+            - ALL explanations (everything outside of code blocks) MUST be in {language} AND MUST reflect your personality
+            - The code itself should remain in Python and be technically accurate
+            
+            Remember to respond in {language}.
             """
         )
         
@@ -70,9 +80,15 @@ class ProgrammingAssistant:
         
         # Create the prompt template for result interpretation
         self.result_interpretation_template = PromptTemplate(
-            input_variables=["question", "code", "execution_result", "language"],
+            input_variables=["question", "code", "execution_result", "language", "personality"],
             template="""
+            {personality}
+            
+            You MUST embody the personality described above in ALL your explanations, while maintaining technical accuracy.
+            
             You are an AI programming assistant. You've generated code to answer a user's question, and the code has been executed.
+            
+            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
             
             User's question: {question}
             
@@ -88,7 +104,10 @@ class ProgrammingAssistant:
             
             Please interpret the execution result and provide a helpful response to the user. If there were errors, explain what went wrong and how to fix it.
             
-            IMPORTANT: You must respond in {language}. If you don't know how to speak {language}, do your best to translate your response to {language}.
+            CRITICAL: Your explanations MUST maintain the personality traits, tone, and style described at the beginning.
+            The personality affects HOW you explain things, not the technical accuracy of your explanation.
+            
+            Remember to respond in {language}.
             """
         )
         
@@ -124,7 +143,20 @@ class ProgrammingAssistant:
             "purpose of", "explain", "definition", "concept", "theory", "principle"
         ]
         
+        # Keywords that indicate non-programming topics that should be excluded
+        non_programming_keywords = [
+            "olympia", "bodybuilding", "competition", "sport", "athlete", "championship",
+            "tournament", "winner", "won", "match", "game", "player", "team", "league",
+            "mr.", "mr ", "miss", "ms.", "champion", "title", "rank", "ranking",
+            "contest", "medal", "record", "sports", "season"
+        ]
+        
         question_lower = question.lower()
+        
+        # First check if it contains non-programming keywords
+        for keyword in non_programming_keywords:
+            if keyword in question_lower:
+                return False
         
         # Check if it's a conceptual question about programming
         for keyword in conceptual_keywords:
@@ -135,6 +167,26 @@ class ProgrammingAssistant:
         for keyword in programming_keywords:
             if keyword in question_lower:
                 return True
+        
+        # Check if the question explicitly requests code or a solution
+        code_request_phrases = [
+            "write code", "write a program", "code example", "sample code",
+            "solve this", "solution for", "implement a", "implementation of",
+            "how would you code", "can you code", "coding challenge"
+        ]
+        
+        for phrase in code_request_phrases:
+            if phrase in question_lower:
+                return True
+        
+        # If it's a "how to" question without specific programming keywords,
+        # it's probably not a programming question
+        if question_lower.startswith("how to") and not any(kw in question_lower for kw in programming_keywords):
+            return False
+            
+        # If it starts with "who" or "when" or "where", it's probably not a programming question
+        if any(question_lower.startswith(w) for w in ["who", "when", "where", "what is the last"]):
+            return False
         
         return False
     
@@ -158,7 +210,7 @@ class ProgrammingAssistant:
         
         return matches
     
-    def answer_programming_question(self, question: str, chat_history: List[Dict[str, str]], language: str = "English") -> Dict[str, Any]:
+    def answer_programming_question(self, question: str, chat_history: List[Dict[str, str]], language: str = "English", personality: str = "You are a helpful assistant.") -> Dict[str, Any]:
         """
         Answer a programming question with code execution
         
@@ -166,20 +218,23 @@ class ProgrammingAssistant:
             question: The user's question
             chat_history: List of previous chat messages
             language: Language to respond in
+            personality: The personality to use for responses
             
         Returns:
             Dict[str, Any]: A dictionary containing the answer and execution results
         """
         # Format chat history for context
         formatted_history = ""
-        for msg in chat_history[-5:]:  # Use last 5 messages for context
+        for msg in chat_history[-10:]:  # Increased from 5 to 20 messages for better context
             role = "User" if msg["role"] == "user" else "Assistant"
             formatted_history += f"{role}: {msg['message']}\n"
         
         # Generate code using the code generation chain
         response = self.code_generation_chain.invoke({
             "question": question,
-            "chat_history": formatted_history
+            "chat_history": formatted_history,
+            "language": language,
+            "personality": personality
         })
         
         # Extract code blocks from the response
@@ -223,7 +278,8 @@ class ProgrammingAssistant:
             "question": question,
             "code": code,
             "execution_result": formatted_result,
-            "language": language
+            "language": language,
+            "personality": personality
         })
         
         return {

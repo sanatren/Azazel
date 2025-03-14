@@ -50,12 +50,10 @@ class WebSearchTool:
             List of dictionaries containing search results
         """
         if not self.google_service:
-            st.error(f"Google Search API not initialized. API Key: {self.google_api_key[:5]}..., CSE ID: {self.google_cse_id[:5]}...")
             return [{"title": "Search Error", "link": "", "snippet": "Google Search API not initialized."}]
         
         try:
             # Execute the search
-            st.info(f"Searching for: {query}")
             result = self.google_service.cse().list(
                 q=query,
                 cx=self.google_cse_id,
@@ -71,14 +69,11 @@ class WebSearchTool:
                         "link": item.get("link", ""),
                         "snippet": item.get("snippet", "")
                     })
-                st.success(f"Found {len(search_results)} results")
                 return search_results
             else:
-                st.warning("No search results found")
                 return [{"title": "No Results", "link": "", "snippet": "No search results found."}]
         
         except Exception as e:
-            st.error(f"Google search error: {str(e)}")
             return [{"title": "Search Error", "link": "", "snippet": f"Error: {str(e)}"}]
     
     def wikipedia_search(self, query: str, sentences: int = 3) -> Dict[str, Any]:
@@ -164,7 +159,6 @@ class WebSearchTool:
             Extracted text content
         """
         try:
-            st.info(f"Attempting to extract content from: {url}")
             # Send a request to the URL
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -174,7 +168,6 @@ class WebSearchTool:
             
             # Check content type
             content_type = response.headers.get('Content-Type', '').lower()
-            st.info(f"Content type: {content_type}")
             
             # Handle different content types
             if 'text/html' in content_type:
@@ -193,18 +186,14 @@ class WebSearchTool:
                 chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
                 text = "\n".join(chunk for chunk in chunks if chunk)
                 
-                st.success(f"Successfully extracted {len(text)} characters of content")
                 # Limit the text length
                 return text[:10000]
             elif 'application/pdf' in content_type:
-                st.warning("PDF content detected - PDF extraction not implemented")
                 return "This appears to be a PDF document. PDF content extraction is not supported."
             else:
-                st.warning(f"Unsupported content type: {content_type}")
                 return f"Unable to extract content from this URL. Unsupported content type: {content_type}"
         
         except Exception as e:
-            st.error(f"Error extracting content: {str(e)}")
             return f"Error extracting content: {str(e)}"
     
     def search(self, query: str) -> Dict[str, Any]:

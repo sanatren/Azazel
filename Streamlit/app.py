@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timedelta
 from langchain.chat_models import ChatOpenAI
 from langchain_community.chat_models import ChatOpenAI
+from openai import OpenAI
 import docx
 import tempfile
 
@@ -45,48 +46,44 @@ def debug_basic_response(message):
         st.error(f"Error in basic response generation: {str(e)}")
         return None
 
-# Update the direct_openai_response function to include chat history
-def direct_openai_response(message, session_id=None):
-    """Get a direct response from OpenAI API with chat history"""
+# Update the direct_openai_response function to include chat history and sentiment analysis
+def direct_openai_response(question, session_id):
+    """Get direct response from OpenAI API"""
+    if not st.session_state.openai_api_key:
+        return "Please provide an OpenAI API key to continue."
+        
     try:
-        from openai import OpenAI
-        import os
+        # Initialize the model
+        current_personality = st.session_state.get(f"personality_{session_id}", "You are a helpful assistant.")
+        client = OpenAI(api_key=st.session_state.openai_api_key)
         
-        # Get API key
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            api_key = st.session_state.openai_api_key
+        # Initialize sentiment analyzer if not already initialized
+        if "sentiment_analyzer" not in st.session_state:
+            from Bot.sentiment_analyzer import SentimentAnalyzer
+            st.session_state.sentiment_analyzer = SentimentAnalyzer()
             
-        if not api_key:
-            st.error("OpenAI API key not found")
-            return None
+        # Analyze sentiment
+        sentiment = st.session_state.sentiment_analyzer.analyze_sentiment(question)
         
-        # Get the current language and model from session state
-        language = st.session_state.get("current_language", "English")
-        model_name = available_models[st.session_state.selected_model]
+        # Get chat history
+        chat_history = get_chat_history_from_supabase(session_id)
         
-        # Initialize client
-        client = OpenAI(api_key=api_key)
-        
-        # Prepare messages
-        messages = [
-            {"role": "system", "content": f"You are a helpful assistant. Please respond in {language}."}
+        # Format chat history for the API
+        formatted_messages = [
+            {"role": "system", "content": current_personality}
         ]
         
-        # Add chat history if session_id is provided
-        if session_id:
-            chat_history = get_chat_history_from_supabase(session_id)
-            # Add last 5 messages for context
-            for msg in chat_history[-5:]:
-                messages.append({"role": msg["role"], "content": msg["message"]})
+        # Add recent chat history
+        for msg in chat_history[-5:]:  # Last 5 messages
+            formatted_messages.append({"role": msg["role"], "content": msg["message"]})
         
         # Add the current message
-        messages.append({"role": "user", "content": message})
+        formatted_messages.append({"role": "user", "content": question})
         
         # Make API call with selected model
         response = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
+            model="gpt-3.5-turbo",
+            messages=formatted_messages,
             temperature=0.7,
         )
         
@@ -104,8 +101,8 @@ from rag_chain import RAGChain
 # Import chatbot functions
 from audio_handler import AudioHandler
 from chatbot_memory import (
-    invoke_with_language, 
-    get_session_history, 
+    invoke_with_language,
+    get_session_history,
     set_session_language,
     save_message_to_supabase
 )
@@ -129,18 +126,6 @@ google_cse_id = os.getenv("GOOGLE_CSE_ID")
 
 if google_api_key and google_cse_id and openai_api_key:
     search_chain = SearchChain(openai_api_key, google_api_key, google_cse_id)
-    st.sidebar.success("Web search capability enabled!")
-    if st.sidebar.button("Test Google Search API"):
-        with st.sidebar:
-            with st.spinner("Testing Google Search API..."):
-                try:
-                    test_results = search_chain.web_search_tool.google_search("test query")
-                    if test_results and not test_results[0]["title"].startswith("Search Error"):
-                        st.success("Google Search API is working correctly!")
-                    else:
-                        st.error(f"Google Search API test failed: {test_results[0]['snippet']}")
-                except Exception as e:
-                    st.error(f"Google Search API test failed: {str(e)}")
 else:
     search_chain = None
     if not google_api_key or not google_cse_id:
@@ -239,28 +224,29 @@ def display_chat_messages(chat_history):
         st.error(f"Error displaying messages: {e}")
 
 # Move this function definition to the top with other functions
-def save_session_to_supabase(session_id, session_name, language="English"):
+def save_session_to_supabase(session_id, session_name, language="English", personality=None):
     """Save session metadata to Supabase sessions table"""
     try:
         # Check if session exists
         existing = supabase.table("sessions").select("*").eq("session_id", session_id).execute()
         
+        # Prepare data
+        data = {
+            "name": session_name,
+            "language": language
+            # Let Postgres handle last_accessed timestamp
+        }
+        
+        # Add personality if provided
+        if personality:
+            data["personality"] = personality
+        
         if existing.data:
             # Update existing session
-            data = {
-                "name": session_name,
-                "language": language
-                # Let Postgres handle last_accessed timestamp
-            }
             response = supabase.table("sessions").update(data).eq("session_id", session_id).execute()
         else:
             # Create new session
-            data = {
-                "session_id": session_id,
-                "name": session_name,
-                "language": language
-                # Let Postgres handle created_at and last_accessed timestamps
-            }
+            data["session_id"] = session_id
             response = supabase.table("sessions").insert(data).execute()
         
         return response
@@ -309,6 +295,21 @@ def delete_session(session_id):
         return False
 
 # Initialize Streamlit session state
+if "openai_api_key" not in st.session_state:
+    st.session_state.openai_api_key = None
+
+# Map predefined personalities to actual instructions
+personality_map = {
+    "Default (Helpful Assistant)": "You are a helpful, respectful, and honest assistant.",
+    "Professional & Formal": "You are a professional assistant who communicates with formal language, precise terminology, and maintains a respectful, business-like tone. You prioritize accuracy and clarity in your responses.",
+    "Friendly & Casual": "You are a friendly and casual assistant who uses conversational language, occasional slang, and a warm, approachable tone. You're like chatting with a helpful friend.",
+    "Creative & Imaginative": "You are a creative assistant with a vivid imagination. You use descriptive language, analogies, and metaphors to explain concepts, and you're not afraid to think outside the box.",
+    "Concise & Direct": "You are a concise and direct assistant who values brevity. You get straight to the point with short sentences, avoid unnecessary details, and prioritize actionable information.",
+    "Empathetic & Supportive": "You are an empathetic assistant who shows understanding and emotional intelligence. You acknowledge feelings, use supportive language, and prioritize the user's wellbeing in your responses.",
+    "Humorous & Playful": "You are a humorous assistant with a playful tone. You use appropriate jokes, wordplay, and a light-hearted approach while still being helpful and respectful.",
+    "Educational & Informative": "You are an educational assistant who focuses on teaching and explaining. You provide context, examples, and background information while maintaining an accessible and informative tone."
+}
+
 if "current_session" not in st.session_state:
     existing_sessions = get_all_sessions()
     
@@ -317,16 +318,32 @@ if "current_session" not in st.session_state:
         st.session_state.current_session = existing_sessions[0]["session_id"]
         st.session_state.current_session_name = existing_sessions[0]["name"]
         st.session_state.current_language = existing_sessions[0]["language"]
+        # Set personality if available
+        if "personality" in existing_sessions[0] and existing_sessions[0]["personality"]:
+            st.session_state.current_personality = existing_sessions[0]["personality"]
+            # Find matching predefined personality or set to custom
+            found = False
+            for option, text in personality_map.items():
+                if text == st.session_state.current_personality.split("\n\n")[0]:  # Only compare the first part before the directive
+                    st.session_state.personality_option = option
+                    found = True
+                    break
+            if not found:
+                st.session_state.personality_option = "Custom..."
+                st.session_state.custom_personality_text = st.session_state.current_personality.split("\n\n")[0]  # Strip directives
+        else:
+            st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+            st.session_state.personality_option = "Default (Helpful Assistant)"
     else:
         # Create a new session
         new_session_id = str(uuid.uuid4())
         st.session_state.current_session = new_session_id
         st.session_state.current_session_name = "New Chat"
         st.session_state.current_language = "English"
+        st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+        st.session_state[f"personality_{new_session_id}"] = "You are a helpful, respectful, and honest assistant."
+        st.session_state.personality_option = "Default (Helpful Assistant)"
         save_session_to_supabase(new_session_id, "New Chat")
-
-if "openai_api_key" not in st.session_state:
-    st.session_state.openai_api_key = None
 
 # Sidebar: Manage Sessions and Preferred Language
 st.sidebar.title("🔑 API Key")
@@ -415,18 +432,39 @@ st.sidebar.title("💬 Chat Sessions")
 # New Chat button
 if st.sidebar.button("➕ New Chat"):
     if st.session_state.openai_api_key:  # Only allow new chats if API key is set
+        # Clear any previous personality state to avoid persistence issues
+        if "personality_option" in st.session_state:
+            del st.session_state.personality_option
+        if "current_personality" in st.session_state:
+            del st.session_state.current_personality
+        if "custom_personality_text" in st.session_state:
+            del st.session_state.custom_personality_text
+            
+        # Create new session
         new_session_id = str(uuid.uuid4())
         st.session_state.current_session = new_session_id
         st.session_state.current_session_name = "New Chat"
         st.session_state.current_language = "English"
-        save_session_to_supabase(new_session_id, "New Chat")
+        
+        # Set default personality for new session
+        st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+        st.session_state[f"personality_{new_session_id}"] = "You are a helpful, respectful, and honest assistant."
+        st.session_state.personality_option = "Default (Helpful Assistant)"
+        
+        # Save the new session with default personality
+        save_session_to_supabase(
+            new_session_id,
+            "New Chat",
+            "English",
+            st.session_state.current_personality
+        )
         st.rerun()
     else:
         st.sidebar.error("Please enter your API key first!")
 
 # List existing sessions with a radio button to switch between them
 existing_sessions = get_all_sessions()
-session_options = {session["session_id"]: session.get("name", f"Chat {i+1}") 
+session_options = {session["session_id"]: session.get("name", f"Chat {i+1}")
                   for i, session in enumerate(existing_sessions)}
 
 # Create a mapping of display names to session objects for deletion lookup
@@ -448,11 +486,49 @@ if session_options:
     
     # Switch to the selected session if different from the current one
     if selected_session_id != st.session_state.current_session:
+        # Clear any previous personality state to avoid persistence issues
+        if "personality_option" in st.session_state:
+            del st.session_state.personality_option
+        if "current_personality" in st.session_state:
+            del st.session_state.current_personality
+        if "custom_personality_text" in st.session_state:
+            del st.session_state.custom_personality_text
+        
+        # Set the new session
         st.session_state.current_session = selected_session_id
         selected_session = next((s for s in existing_sessions if s["session_id"] == selected_session_id), None)
         if selected_session:
             st.session_state.current_session_name = selected_session.get("name", "Untitled Chat")
             st.session_state.current_language = selected_session.get("language", "English")
+            
+            # Load the personality for this specific session
+            if "personality" in selected_session and selected_session["personality"]:
+                st.session_state.current_personality = selected_session["personality"]
+                st.session_state[f"personality_{selected_session_id}"] = selected_session["personality"]
+                
+                # Find matching predefined personality or set to custom
+                found = False
+                for option, text in personality_map.items():
+                    base_personality = selected_session["personality"].split("\n\n")[0]  # Only compare the first part
+                    if text == base_personality:
+                        st.session_state.personality_option = option
+                        found = True
+                        break
+                
+                if not found:
+                    st.session_state.personality_option = "Custom..."
+                    # Store just the base personality without directives for editing
+                    st.session_state.custom_personality_text = base_personality
+            else:
+                # Default personality if none is set for this session
+                st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+                st.session_state.personality_option = "Default (Helpful Assistant)"
+            
+            # Reset personality to the one for the new session or to default
+            if "personality" in selected_session and selected_session["personality"]:
+                st.session_state.current_personality = selected_session["personality"]
+                st.session_state[f"personality_{selected_session_id}"] = selected_session["personality"]
+            
         st.rerun()
 
 # Session management section
@@ -485,6 +561,7 @@ if len(existing_sessions) > 1:  # Only show if there's more than one session
         else:
             deleted_any = False
             need_rerun = False
+            deleted_current_session = False
             
             for session_display in sessions_to_delete:
                 # Look up the full session object using our map
@@ -494,6 +571,7 @@ if len(existing_sessions) > 1:  # Only show if there's more than one session
                     
                     # If deleting current session, flag for rerun and session change
                     if session_id == st.session_state.current_session:
+                        deleted_current_session = True
                         need_rerun = True
                     
                     # Delete the session
@@ -502,26 +580,74 @@ if len(existing_sessions) > 1:  # Only show if there's more than one session
                         deleted_any = True
             
             if deleted_any:
-                if need_rerun:
+                # Only get remaining sessions if we deleted the current session or need to rerun
+                if deleted_current_session:
                     # Get remaining sessions to switch to
                     remaining_sessions = get_all_sessions()
                     if remaining_sessions:
                         st.session_state.current_session = remaining_sessions[0]["session_id"]
                         st.session_state.current_session_name = remaining_sessions[0].get("name", "Untitled Chat")
                         st.session_state.current_language = remaining_sessions[0].get("language", "English")
-                st.rerun()
+                        
+                        # Reset personality to the one for the new session or to default
+                        if "personality" in remaining_sessions[0] and remaining_sessions[0]["personality"]:
+                            st.session_state.current_personality = remaining_sessions[0]["personality"]
+                            st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = remaining_sessions[0]["personality"]
+                            
+                            # Find matching predefined personality or set to custom
+                            found = False
+                            for option, text in personality_map.items():
+                                if text == remaining_sessions[0]["personality"].split("\n\n")[0]:  # Only compare the first part
+                                    st.session_state.personality_option = option
+                                    found = True
+                                    break
+                            
+                            if not found:
+                                st.session_state.personality_option = "Custom..."
+                                st.session_state.custom_personality_text = remaining_sessions[0]["personality"].split("\n\n")[0]
+                        else:
+                            # Set to default personality if none is set for the new session
+                            st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+                            st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = "You are a helpful, respectful, and honest assistant."
+                            st.session_state.personality_option = "Default (Helpful Assistant)"
+                
+                if need_rerun:
+                    st.rerun()
 
 # Delete Current Chat button (ensures at least one session remains)
 if st.sidebar.button("🗑️ Delete Current Chat"):
     if len(existing_sessions) > 1:
-        if delete_session(st.session_state.current_session):
+        current_session_id = st.session_state.current_session
+        if delete_session(current_session_id):
             # Set current session to the next available session
-            remaining_sessions = [s for s in existing_sessions if s["session_id"] != st.session_state.current_session]
+            remaining_sessions = [s for s in existing_sessions if s["session_id"] != current_session_id]
             if remaining_sessions:
                 st.session_state.current_session = remaining_sessions[0]["session_id"]
                 st.session_state.current_session_name = remaining_sessions[0].get("name", "Untitled Chat")
                 st.session_state.current_language = remaining_sessions[0].get("language", "English")
-            st.rerun()
+                
+                # Reset personality to the one for the new session or to default
+                if "personality" in remaining_sessions[0] and remaining_sessions[0]["personality"]:
+                    st.session_state.current_personality = remaining_sessions[0]["personality"]
+                    st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = remaining_sessions[0]["personality"]
+                    
+                    # Find matching predefined personality or set to custom
+                    found = False
+                    for option, text in personality_map.items():
+                        if text == remaining_sessions[0]["personality"].split("\n\n")[0]:  # Only compare the first part
+                            st.session_state.personality_option = option
+                            found = True
+                            break
+                    
+                    if not found:
+                        st.session_state.personality_option = "Custom..."
+                        st.session_state.custom_personality_text = remaining_sessions[0]["personality"].split("\n\n")[0]
+                else:
+                    # Set to default personality if none is set for the new session
+                    st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
+                    st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = "You are a helpful, respectful, and honest assistant."
+                    st.session_state.personality_option = "Default (Helpful Assistant)"
+                st.rerun()
     else:
         st.sidebar.error("Cannot delete the only remaining session. Create a new session first.")
 
@@ -571,10 +697,7 @@ with st.sidebar.expander("📁 Document & Image Upload", expanded=False):
                 else:
                     st.error(f"Failed to process {uploaded_file.name}")
     
-    if st.button("Clear All Data"):
-        rag_chain.document_processor.vision_processor.image_store.pop(st.session_state.current_session, None)
-        if rag_chain.clear_documents(st.session_state.current_session):
-            st.success("Cleared all documents and images")
+    # Clear All Data button removed as requested
 
 # Add these options to your sidebar
 st.sidebar.markdown("### Advanced Options")
@@ -601,6 +724,89 @@ if st.sidebar.checkbox("Disable Code Execution", value=st.session_state.get("dis
 else:
     st.session_state.disable_code_execution = False
 
+# Add this after preferred language input in the sidebar
+st.sidebar.subheader("🎭 Personality Settings")
+
+# Info about personalities
+st.sidebar.info("Choose how you want the AI to respond to you. Select a pre-defined personality or create your own.")
+
+# Personality selection options
+personality_options = [
+    "Default (Helpful Assistant)",
+    "Professional & Formal",
+    "Friendly & Casual",
+    "Creative & Imaginative",
+    "Concise & Direct",
+    "Empathetic & Supportive",
+    "Humorous & Playful",
+    "Educational & Informative",
+    "Custom..."
+]
+
+# Add personality selection with a default value
+selected_personality = st.sidebar.selectbox(
+    "Choose AI Personality",
+    options=personality_options,
+    index=personality_options.index(st.session_state.get("personality_option", "Default (Helpful Assistant)")),
+    help="Select how you want the AI to respond to your messages"
+)
+
+# Store the selected option for persistence
+st.session_state.personality_option = selected_personality
+
+# Custom personality input field (shown only when "Custom..." is selected)
+custom_personality = ""
+if selected_personality == "Custom...":
+    st.sidebar.markdown("#### How to Write an Effective Personality")
+    st.sidebar.info("""
+    For best results, be specific and detailed:
+    1. Start with "You are a..." followed by character traits
+    2. Include speaking style and tone details
+    3. Explain HOW the AI should respond to information
+    4. Be explicit about attitude and approach
+    """)
+    
+    custom_personality = st.sidebar.text_area(
+        "Describe the AI's personality and tone",
+        value=st.session_state.get("custom_personality_text", ""),
+        placeholder="Example: You are a witty assistant with deep knowledge of science. You use analogies and occasionally quote famous scientists.",
+        help="Be specific about tone, style, and character traits you want the AI to exhibit"
+    )
+    # Store the custom text for persistence
+    st.session_state.custom_personality_text = custom_personality
+
+# Set the current personality in session state based on selection
+if selected_personality == "Custom...":
+    # Format custom personality for better results
+    if custom_personality:
+        # Ensure it starts with "You are a" if not already
+        if not custom_personality.lower().startswith("you are"):
+            custom_personality = "You are " + custom_personality
+            
+        # Add importance directive to custom personalities
+        custom_personality = custom_personality.strip() + "\n\nYou MUST maintain this personality in ALL your responses, regardless of the subject matter. This personality dictates HOW you respond, not WHAT information you provide."
+        current_personality = custom_personality
+    else:
+        current_personality = "You are a helpful assistant."
+else:
+    # Add importance directive to predefined personalities too
+    current_personality = personality_map[selected_personality] + "\n\nYou MUST maintain this personality in ALL your responses, regardless of the subject matter. This personality dictates HOW you respond, not WHAT information you provide."
+
+# Store the current personality in session state (only for this specific session)
+st.session_state.current_personality = current_personality
+st.session_state[f"personality_{st.session_state.current_session}"] = current_personality
+
+# Update personality in database when changed
+if st.session_state.get(f"previous_personality_{st.session_state.current_session}") != current_personality:
+    save_session_to_supabase(
+        st.session_state.current_session,
+        st.session_state.current_session_name,
+        st.session_state.current_language,
+        current_personality
+    )
+    # Store the previous personality with session ID in the key to make it session-specific
+    st.session_state[f"previous_personality_{st.session_state.current_session}"] = current_personality
+
 # Main Chat Interface
 st.title("🤖 PolyBot")
 
@@ -612,15 +818,46 @@ else:
     # Get chat history
     chat_history = get_chat_history_from_supabase(st.session_state.current_session)
     
-    # Display chat history
+    # Create a container for chat messages
     chat_container = st.container()
+    
+    # Add JavaScript for auto-scrolling
+    st.markdown("""
+        <script>
+            // Scroll to bottom when page loads
+            window.onload = function() {
+                window.scrollTo(0, document.body.scrollHeight);
+            };
+            
+            // Scroll to bottom when new messages are added
+            const observer = new MutationObserver(function() {
+                window.scrollTo(0, document.body.scrollHeight);
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+        </script>
+    """, unsafe_allow_html=True)
+    
+    # Display chat history
     with chat_container:
         for msg in chat_history:
             with st.chat_message(msg["role"]):
                 st.write(msg["message"])
+        
+        # Add a div at the bottom for auto-scrolling
+        st.markdown('<div id="scroll-to-bottom"></div>', unsafe_allow_html=True)
     
     # Check if we should use RAG (if documents have been uploaded)
-    use_rag = st.session_state.current_session in rag_chain.document_processor.vectorstores
+    use_rag = False
+    try:
+        # First check if the rag_chain has the needed attributes
+        if hasattr(rag_chain, "document_processor") and hasattr(rag_chain.document_processor, "vectorstores"):
+            use_rag = st.session_state.current_session in rag_chain.document_processor.vectorstores
+        # Fallback method - use the has_documents_for_session method which should be more reliable
+        else:
+            use_rag = rag_chain.has_documents_for_session(st.session_state.current_session)
+    except Exception as e:
+        st.warning(f"Error checking document status: {e}")
+        use_rag = False
     
     # Add this after the chat history display
     if use_rag:
@@ -719,6 +956,17 @@ else:
     if "pending_user_message" in st.session_state:
         chat_history = get_chat_history_from_supabase(st.session_state.current_session)
         
+        # Initialize sentiment analyzer if not already initialized
+        if "sentiment_analyzer" not in st.session_state:
+            from sentiment_analyzer import SentimentAnalyzer
+            st.session_state.sentiment_analyzer = SentimentAnalyzer()
+        
+        # Get sentiment analysis for the current message
+        sentiment_data = st.session_state.sentiment_analyzer.track_sentiment(
+            st.session_state.current_session,
+            st.session_state.pending_user_message
+        )
+        
         # Determine processing mode
         is_url = search_chain.is_url(st.session_state.pending_user_message) if search_chain else False
         is_programming = programming_assistant.is_programming_question(st.session_state.pending_user_message)
@@ -733,20 +981,43 @@ else:
             if st.session_state.get("force_rag"):
                 should_use_rag = True
             else:
-                # Check if the query is relevant to the documents
-                should_use_rag = rag_chain.is_relevant_to_documents(
-                    st.session_state.pending_user_message, 
-                    st.session_state.current_session
-                )
+                # Check if the query is relevant to the documents with higher threshold for relevance
+                try:
+                    should_use_rag = rag_chain.is_relevant_to_documents(
+                        st.session_state.pending_user_message,
+                        st.session_state.current_session
+                    )
+                except Exception as e:
+                    st.warning(f"Error checking document relevance: {e}")
+                    should_use_rag = False
         
-        # Check if it needs a web search (only if not using RAG or URL)
+        # Check if it needs a web search regardless of whether documents are available
         needs_search = False
-        if search_chain and not is_url and not should_use_rag:
-            needs_search = search_chain.needs_search(st.session_state.pending_user_message)
-            
-            # Force search if requested
-            if st.session_state.get("force_search", False):
+        if search_chain:
+            if is_url:
                 needs_search = True
+            elif st.session_state.get("force_search", False):
+                # Force search if requested regardless of documents
+                needs_search = True
+            else:
+                # Check if the query matches web search criteria
+                needs_search = search_chain.needs_search(st.session_state.pending_user_message)
+            
+            # Important: If both RAG and web search are possible, prioritize web search
+            # for queries that seem more suited for general web information
+            if should_use_rag and needs_search:
+                # Check if query contains search-specific keywords
+                search_keywords = ["today", "latest", "news", "current", "recent", 
+                                   "2023", "2024", "weather", "covid", "election", 
+                                   "stock", "market", "price", "release", "update"]
+                
+                query_lower = st.session_state.pending_user_message.lower()
+                has_search_keywords = any(kw in query_lower for kw in search_keywords)
+                
+                # If search keywords are present, prioritize web search over documents
+                if has_search_keywords:
+                    should_use_rag = False
+                    st.info("Using web search for time-sensitive or external information request.")
 
         # Response generation logic
         try:
@@ -762,37 +1033,45 @@ else:
             elif is_url:
                 if search_chain:
                     url = search_chain.extract_url(st.session_state.pending_user_message)
-                    st.info(f"Processing URL: {url}")
-                    url_response = search_chain.process_url(
-                        url,
+                    with st.spinner(f"Processing URL: {url}"):
+                        url_response = search_chain.process_url(
+                            url,
+                            st.session_state.pending_user_message,
+                            chat_history,
+                            st.session_state.current_language
+                        )
+                        response = url_response["answer"]
+            elif is_programming:
+                # Pass the current personality to the programming assistant
+                with st.spinner("Analyzing programming question..."):
+                    programming_response = programming_assistant.answer_programming_question(
+                        st.session_state.pending_user_message,
+                        chat_history,
+                        st.session_state.current_language,
+                        personality=st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                    )
+                    response = programming_response["answer"]
+            elif should_use_rag:
+                # Pass the current personality to the RAG chain
+                with st.spinner("Analyzing documents..."):
+                    rag_chain.personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                    rag_response = rag_chain.answer_question(
+                        st.session_state.pending_user_message,
+                        st.session_state.current_session,
+                        chat_history,
+                        st.session_state.current_language
+                    )
+                    response = rag_response["answer"]
+            elif needs_search:
+                with st.spinner("Searching the web for information..."):
+                    # Pass the current personality to the search chain
+                    search_chain.personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                    search_response = search_chain.search_with_web(
                         st.session_state.pending_user_message,
                         chat_history,
                         st.session_state.current_language
                     )
-                    response = url_response["answer"]
-            elif is_programming:
-                programming_response = programming_assistant.answer_programming_question(
-                    st.session_state.pending_user_message,
-                    chat_history,
-                    st.session_state.current_language
-                )
-                response = programming_response["answer"]
-            elif should_use_rag:
-                rag_response = rag_chain.answer_question(
-                    st.session_state.pending_user_message,
-                    st.session_state.current_session,
-                    chat_history,
-                    st.session_state.current_language
-                )
-                response = rag_response["answer"]
-            elif needs_search:
-                st.info("Searching the web for information...")
-                search_response = search_chain.search_with_web(
-                    st.session_state.pending_user_message,
-                    chat_history,
-                    st.session_state.current_language
-                )
-                response = search_response["answer"]
+                    response = search_response["answer"]
 
             # If we got a response, display it
             if response:

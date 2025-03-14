@@ -7,8 +7,8 @@ from langchain_openai import ChatOpenAI
 from supabase import create_client
 
 # Constants
-MAX_HISTORY_LENGTH = 20  # Maximum number of messages to keep in memory
-MAX_TOKEN_LENGTH = 4000  # Maximum tokens for context window
+MAX_HISTORY_LENGTH = 35  # Maximum number of messages to keep in memory
+MAX_TOKEN_LENGTH = 16000  # Maximum tokens for context window
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -123,10 +123,26 @@ def delete_session(session_id):
         supabase.table("sessions").delete().eq("session_id", session_id).execute()
         if session_id in session_data:
             del session_data[session_id]
+        
+        # Reset the current_personality in session state when a session is deleted
+        if 'current_personality' in st.session_state:
+            st.session_state.current_personality = None
+            
         return True
     except Exception as e:
         print(f"Error deleting session: {e}")
         return False
+
+def get_all_sessions():
+    """Retrieve all active sessions from the past week"""
+    try:
+        # Get sessions from the past week
+        one_week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+        response = supabase.table("sessions").select("*").gte("last_accessed", one_week_ago).order("last_accessed", desc=True).execute()
+        return response.data
+    except Exception as e:
+        print(f"Error retrieving sessions: {e}")
+        return []
 
 def invoke_with_language(session_id, messages, language="English"):
     """
@@ -170,13 +186,13 @@ def invoke_with_language(session_id, messages, language="English"):
         history = get_chat_history_from_supabase(session_id)
         
         # Create a system message that instructs the model to respond in the specified language
-        system_message = SystemMessage(content=f"You are a helpful assistant. Please respond in {language}.")
+        system_message = SystemMessage(content=f"You are a helpful assistant. CRITICAL INSTRUCTION: You MUST respond in {language}.")
         
         # Prepare messages with history and the new message
         formatted_messages = [system_message]
         
-        # Add recent chat history (last 5 messages)
-        for msg in history[-5:]:
+        # Add more recent chat history (increased from last 5 to last 20 messages)
+        for msg in history[-10:]:
             if msg["role"] == "user":
                 formatted_messages.append(HumanMessage(content=msg["message"]))
             else:

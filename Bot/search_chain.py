@@ -7,6 +7,8 @@ from langchain.chains import LLMChain
 from web_search import WebSearchTool
 from dotenv import load_dotenv
 import re
+import requests
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -27,6 +29,7 @@ class SearchChain:
         """
         self.api_key = api_key
         self.web_search_tool = WebSearchTool(google_api_key, google_cse_id)
+        self.personality = "You are a helpful assistant."
         
         # Initialize the language model
         self.llm = ChatOpenAI(
@@ -37,9 +40,15 @@ class SearchChain:
         
         # Create the prompt template for search-augmented responses
         self.search_prompt_template = PromptTemplate(
-            input_variables=["question", "search_results", "chat_history", "language"],
+            input_variables=["question", "search_results", "chat_history", "language", "personality"],
             template="""
+            {personality}
+            
+            You MUST embody the personality described above in ALL your responses, regardless of the web search content.
+            
             You are an AI assistant with the ability to search the web for up-to-date information.
+            
+            CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
             
             User's question: {question}
             
@@ -61,7 +70,10 @@ class SearchChain:
             3. Be concise but thorough
             4. If there are multiple perspectives on a topic, present them fairly
             
-            IMPORTANT: You must respond in {language}. If you don't know how to speak {language}, do your best to translate your response to {language}.
+            CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning. 
+            The personality should affect HOW you respond, not WHAT information you provide.
+            
+            Remember to respond in {language}.
             """
         )
         
@@ -94,6 +106,17 @@ class SearchChain:
             "where is", "where can", "how to find", "where to buy",
             "who is", "what is happening", "what happened",
             
+            # Time-sensitive query keywords
+            "last", "latest", "most recent", "now", "current", "2024", "2023",
+            "this year", "this month", "this week", "today", "yesterday",
+            "upcoming", "next", "schedule", "when will", "when is",
+            
+            # Sports, competition and entertainment terms
+            "won", "winner", "champion", "championship", "tournament", "competition",
+            "olympia", "bodybuilding", "sport", "match", "game", "sports",
+            "athlete", "player", "team", "league", "season", "standings",
+            "ranked", "ranking", "medal", "score", "record", "title",
+            
             # Personal information and social media terms
             "social media", "profile", "account", "facebook", "twitter", "instagram",
             "linkedin", "github", "youtube", "tiktok", "snapchat", "reddit",
@@ -119,6 +142,14 @@ class SearchChain:
         for pattern in general_knowledge_patterns:
             if pattern in query_lower:
                 return False
+                
+        # Special handling for "who" questions about people - these often need search
+        if query_lower.startswith("who "):
+            return True
+            
+        # Special handling for questions about events and competitions
+        if any(term in query_lower for term in ["mr.", "mr ", "miss", "ms.", "ms ", "competition", "contest"]):
+            return True
         
         # Check for specific date/time references that would need current info
         date_patterns = ["2023", "2024", "this year", "this month", "this week", "today"]
@@ -234,7 +265,8 @@ class SearchChain:
             "question": question,
             "search_results": formatted_results,
             "chat_history": formatted_history,
-            "language": language
+            "language": language,
+            "personality": self.personality
         })
         
         return {
@@ -312,9 +344,15 @@ class SearchChain:
             
             # Create a prompt template for URL processing
             url_prompt_template = PromptTemplate(
-                input_variables=["url", "content", "question", "chat_history", "language"],
+                input_variables=["url", "content", "question", "chat_history", "language", "personality"],
                 template="""
+                {personality}
+                
+                You MUST embody the personality described above in ALL your responses, regardless of the URL content.
+                
                 You are an AI assistant that helps users understand content from URLs.
+                
+                CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
                 
                 URL: {url}
                 
@@ -335,7 +373,10 @@ class SearchChain:
                 If the user asked a specific question about the content, answer it based on the information provided.
                 If the content is not relevant to the request, explain why and provide the best response you can.
                 
-                IMPORTANT: You must respond in {language}. If you don't know how to speak {language}, do your best to translate your response to {language}.
+                CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning.
+                The personality should affect HOW you respond, not WHAT information you provide.
+                
+                Remember to respond in {language}.
                 """
             )
             
@@ -357,7 +398,8 @@ class SearchChain:
                 "content": content,
                 "question": question,
                 "chat_history": formatted_history,
-                "language": language
+                "language": language,
+                "personality": self.personality
             })
             
             return {
@@ -390,7 +432,7 @@ class SearchChain:
         try:
             # First, generate a better search query based on the conversation context
             context_prompt_template = PromptTemplate(
-                input_variables=["query", "chat_history"],
+                input_variables=["query", "chat_history", "current_year"],
                 template="""
                 You are an AI assistant that helps formulate better search queries based on conversation context.
                 
@@ -401,7 +443,13 @@ class SearchChain:
                 {chat_history}
                 ---------------------
                 
-                Based on the current query and the conversation history, create an improved search query that captures the full context of what the user is asking about.
+                Current year: {current_year}
+                
+                Based on the current query and the conversation history, create an improved search query that:
+                1. Captures the full context of what the user is asking about
+                2. EXPLICITLY includes the current year or "latest" or "current" when the query is about recent events, people, competitions, or other time-sensitive information
+                3. Avoids using time context from previous messages unless the user is SPECIFICALLY asking about historical information
+                4. Is optimized for web search engines
                 
                 Return ONLY the improved search query without any explanation or additional text.
                 """
@@ -419,10 +467,15 @@ class SearchChain:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 formatted_history += f"{role}: {msg['message']}\n"
             
+            # Get current year for time context
+            from datetime import datetime
+            current_year = datetime.now().year
+            
             # Generate the improved search query
             improved_query_response = context_chain.invoke({
                 "query": query,
-                "chat_history": formatted_history
+                "chat_history": formatted_history,
+                "current_year": current_year
             })
             
             # Extract the improved query
@@ -440,7 +493,8 @@ class SearchChain:
                 "question": query,  # Use the original question for response generation
                 "search_results": self.format_search_results(search_results),
                 "chat_history": formatted_history,
-                "language": language
+                "language": language,
+                "personality": self.personality
             })
             
             return {

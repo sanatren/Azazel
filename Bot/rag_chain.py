@@ -13,11 +13,18 @@ class RAGChain:
         self.api_key = api_key
         self.document_processor = DocumentProcessor()
         self.llm = ChatOpenAI(model="gpt-3.5-turbo", openai_api_key=api_key, temperature=0.5)
+        self.personality = "You are a helpful assistant."
         
         self.prompt_template = PromptTemplate(
-            input_variables=["question", "context", "chat_history", "language"],
+            input_variables=["question", "context", "chat_history", "language", "personality"],
             template="""
+            {personality}
+            
+            You MUST embody the personality described above in ALL your responses, regardless of the document content.
+            
             You are an AI assistant that answers questions using documents and images.
+            
+            CRITICAL INSTRUCTION: You must respond in {language}. All text outside of direct quotes must be in {language}.
             
             Available Context (which may include multiple documents and images):
             ---------------------
@@ -34,7 +41,10 @@ class RAGChain:
             When answering, consider information from ALL available documents. If multiple documents are referenced, 
             synthesize information across them. Mention document names when appropriate to clarify sources.
             
-            Respond in {language}. Combine text and images when relevant.
+            IMPORTANT: Your response MUST maintain the personality traits, tone, and style described at the beginning. 
+            The personality should affect HOW you respond, not WHAT information you provide from the documents.
+            
+            Remember to respond in {language}.
             """
         )
         self.chain = LLMChain(llm=self.llm, prompt=self.prompt_template)
@@ -93,14 +103,15 @@ class RAGChain:
         
         formatted_history = "\n".join(
             f"{msg['role']}: {msg['message']}" 
-            for msg in chat_history[-5:]
+            for msg in chat_history[-7:]
         )
 
         result = self.chain.invoke({
             "question": question,
             "context": context,
             "chat_history": formatted_history,
-            "language": language
+            "language": language,
+            "personality": self.personality
         })
         
         return {
