@@ -127,67 +127,73 @@ class ProgrammingAssistant:
         Returns:
             bool: True if it's likely a programming question needing code, False otherwise
         """
-        # Simple heuristic: check for programming-related keywords
-        programming_keywords = [
-            "code", "program", "function", "algorithm", "error", 
-            "debug", "implement", "script", "syntax", "variable", "class",
-            "object", "method", "library", "module", "import", "exception",
-            "loop", "array", "list", "dictionary", "dataframe", "pandas",
-            "numpy", "matplotlib", "plot", "graph", "calculate", "compute"
+        import re
+        
+        # First, check for explicit programming requests
+        explicit_programming_patterns = [
+            r"\bcode\b.*\bfor\b", r"\bwrite\b.*\bprogram\b", r"\bfunction\b.*\bto\b",
+            r"\bimplement\b.*\balgorithm\b", r"\bdebug\b", r"\bsyntax\b", r"\bcompile\b",
+            r"\bcoding\b", r"\bscript\b.*\bto\b"
         ]
         
-        # Keywords that indicate conceptual questions (not needing code execution)
-        conceptual_keywords = [
-            "what is", "why use", "difference between", "compare", "versus", "vs",
-            "better than", "advantages", "disadvantages", "history of", "when to use",
-            "purpose of", "explain", "definition", "concept", "theory", "principle"
+        for pattern in explicit_programming_patterns:
+            if re.search(pattern, question.lower()):
+                return True
+        
+        # Check for programming concepts that require code
+        programming_concepts = [
+            "algorithm", "function", "class", "method", "variable", "loop", "recursion",
+            "data structure", "api", "interface", "database query", "sql", "regex",
+            "parameter", "argument", "return value", "object", "exception", "module"
         ]
         
-        # Keywords that indicate non-programming topics that should be excluded
-        non_programming_keywords = [
-            "olympia", "bodybuilding", "competition", "sport", "athlete", "championship",
-            "tournament", "winner", "won", "match", "game", "player", "team", "league",
-            "mr.", "mr ", "miss", "ms.", "champion", "title", "rank", "ranking",
-            "contest", "medal", "record", "sports", "season"
+        # Only consider it programming if these concepts are paired with action verbs
+        action_verbs = [
+            "create", "write", "implement", "develop", "code", "build", "design", 
+            "fix", "solve", "optimize", "generate", "define", "declare"
         ]
         
         question_lower = question.lower()
         
-        # First check if it contains non-programming keywords
-        for keyword in non_programming_keywords:
-            if keyword in question_lower:
-                return False
+        # Check for action verb + programming concept pairs
+        for verb in action_verbs:
+            for concept in programming_concepts:
+                if f"{verb} {concept}" in question_lower:
+                    return True
         
-        # Check if it's a conceptual question about programming
-        for keyword in conceptual_keywords:
-            if keyword in question_lower:
-                return False
-        
-        # Check if any programming keyword is in the question
-        for keyword in programming_keywords:
-            if keyword in question_lower:
-                return True
-        
-        # Check if the question explicitly requests code or a solution
-        code_request_phrases = [
-            "write code", "write a program", "code example", "sample code",
-            "solve this", "solution for", "implement a", "implementation of",
-            "how would you code", "can you code", "coding challenge"
+        # Check if the question is asking for a list or information that shouldn't be code
+        information_patterns = [
+            r"who (is|are)", r"what (is|are)", r"list of", r"top \d+", 
+            r"give me", r"tell me about", r"show me", r"where", r"when", 
+            r"richest", r"largest", r"newest", r"oldest", r"best", r"worst",
+            r"arrange", r"sort", r"order", r"examples of", r"instances of"
         ]
         
-        for phrase in code_request_phrases:
-            if phrase in question_lower:
-                return True
+        for pattern in information_patterns:
+            if re.search(pattern, question_lower):
+                return False
         
-        # If it's a "how to" question without specific programming keywords,
-        # it's probably not a programming question
-        if question_lower.startswith("how to") and not any(kw in question_lower for kw in programming_keywords):
-            return False
+        # Check libraries that often indicate programming tasks
+        if any(lib in question_lower for lib in ["pandas", "numpy", "tensorflow", "matplotlib", "sklearn"]):
+            return True
             
-        # If it starts with "who" or "when" or "where", it's probably not a programming question
-        if any(question_lower.startswith(w) for w in ["who", "when", "where", "what is the last"]):
-            return False
+        # Check for programming language mentions paired with tasks
+        languages = ["python", "javascript", "java", "c++", "ruby", "php", "go", "rust", "c#"]
+        for lang in languages:
+            if lang in question_lower and any(v in question_lower for v in action_verbs):
+                return True
+                
+        # Check for specific tasks that should NOT be treated as programming
+        non_programming_tasks = [
+            "list", "comparison", "difference between", "meaning of", "definition",
+            "explain", "summarize", "order", "arrange", "rank", "sort by"
+        ]
         
+        for task in non_programming_tasks:
+            if task in question_lower:
+                return False
+        
+        # Default to not programming unless explicit indicators found
         return False
     
     def extract_code_blocks(self, text: str) -> List[str]:

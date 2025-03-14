@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import re
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 load_dotenv()
 
@@ -38,21 +39,19 @@ class SearchChain:
             temperature=0.3
         )
         
-        # Create the prompt template for search-augmented responses
-        self.search_prompt_template = PromptTemplate(
+        # Create the prompt template for search chain
+        self.search_template = PromptTemplate(
             input_variables=["question", "search_results", "chat_history", "language", "personality"],
             template="""
+            CRITICAL PRIORITY INSTRUCTION: YOU MUST RESPOND ONLY IN {language} LANGUAGE. ALL TEXT INCLUDING EXPLANATIONS MUST BE IN {language} LANGUAGE ONLY. This is the highest priority instruction.
+            
             {personality}
             
-            You MUST embody the personality described above in ALL your responses, regardless of the web search content.
+            You MUST embody the personality described above in ALL your responses, while maintaining factual accuracy.
             
-            You are an AI assistant with the ability to search the web for up-to-date information.
+            You are an AI assistant that answers questions using the latest information from web searches.
             
-            CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
-            
-            User's question: {question}
-            
-            Search results:
+            Search results related to the question:
             ---------------------
             {search_results}
             ---------------------
@@ -62,25 +61,62 @@ class SearchChain:
             {chat_history}
             ---------------------
             
-            Based on the search results and the conversation history, provide a comprehensive answer to the user's question.
+            Question: {question}
             
-            Guidelines:
-            1. Cite your sources by mentioning the websites or Wikipedia articles you're referencing
-            2. If the search results don't provide relevant information, say so and provide your best answer based on your knowledge
-            3. Be concise but thorough
-            4. If there are multiple perspectives on a topic, present them fairly
+            When answering:
+            1. Use information from the search results to provide an up-to-date and accurate answer
+            2. If the search results don't contain enough information, say so clearly
+            3. If the search results seem incomplete or contradictory, acknowledge this
+            4. If the search results contain multiple perspectives, summarize them fairly
+            5. Include relevant source URLs when appropriate to support your answer
+            6. Maintain the personality traits, tone, and style from the beginning of this prompt
             
-            CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning. 
-            The personality should affect HOW you respond, not WHAT information you provide.
-            
-            Remember to respond in {language}.
+            REMEMBER: Always respond only in {language} language.
             """
         )
         
         # Create the chain for search-augmented responses
         self.search_chain = LLMChain(
             llm=self.llm,
-            prompt=self.search_prompt_template
+            prompt=self.search_template
+        )
+        
+        # Create the prompt template for URL processing
+        self.url_template = PromptTemplate(
+            input_variables=["question", "url", "content", "chat_history", "language", "personality"],
+            template="""
+            CRITICAL PRIORITY INSTRUCTION: YOU MUST RESPOND ONLY IN {language} LANGUAGE. ALL TEXT INCLUDING EXPLANATIONS MUST BE IN {language} LANGUAGE ONLY. This is the highest priority instruction.
+            
+            {personality}
+            
+            You MUST embody the personality described above in ALL your responses, while maintaining factual accuracy.
+            
+            You are an AI assistant that answers questions about web content by analyzing the content of URLs.
+            
+            URL: {url}
+            
+            Content from the URL:
+            ---------------------
+            {content}
+            ---------------------
+            
+            Previous conversation:
+            ---------------------
+            {chat_history}
+            ---------------------
+            
+            Question: {question}
+            
+            When answering:
+            1. Focus on extracting relevant information from the URL content to answer the question
+            2. If the content doesn't fully answer the question, acknowledge the limitations
+            3. Quote or paraphrase from the content when appropriate
+            4. Stay true to what the content actually says - don't make up information
+            5. If necessary, describe the general structure or purpose of the web page
+            6. Maintain the personality traits, tone, and style from the beginning of this prompt
+            
+            REMEMBER: Always respond only in {language} language.
+            """
         )
     
     def needs_search(self, query: str) -> bool:
@@ -93,83 +129,82 @@ class SearchChain:
         Returns:
             bool: True if the query needs a web search, False otherwise
         """
+        import re
+        
         # If force_search is enabled in session state, always use web search
         if st.session_state.get("force_search", False):
             return True
-        
-        # List of keywords that strongly indicate a need for web search
-        search_keywords = [
-            # General search terms
-            "search", "find", "look up", "google", "internet", "web", "online",
-            "latest", "recent", "news", "current", "today", "yesterday",
-            "weather", "stock", "price", "cost", "worth", "value",
-            "where is", "where can", "how to find", "where to buy",
-            "who is", "what is happening", "what happened",
             
-            # Time-sensitive query keywords
-            "last", "latest", "most recent", "now", "current", "2024", "2023",
-            "this year", "this month", "this week", "today", "yesterday",
-            "upcoming", "next", "schedule", "when will", "when is",
-            
-            # Sports, competition and entertainment terms
-            "won", "winner", "champion", "championship", "tournament", "competition",
-            "olympia", "bodybuilding", "sport", "match", "game", "sports",
-            "athlete", "player", "team", "league", "season", "standings",
-            "ranked", "ranking", "medal", "score", "record", "title",
-            
-            # Personal information and social media terms
-            "social media", "profile", "account", "facebook", "twitter", "instagram",
-            "linkedin", "github", "youtube", "tiktok", "snapchat", "reddit",
-            "available on", "find me", "my profile", "my account", "my social"
-        ]
-        
-        # List of question types that can usually be answered without search
-        general_knowledge_patterns = [
-            "what is", "how do", "how does", "why is", "why do", "why does",
-            "can you explain", "tell me about", "describe", "define",
-            "tips", "advice", "help me", "guide", "steps", "how can I",
-            "best practices", "recommendations", "suggest", "ideas for"
-        ]
-        
         query_lower = query.lower()
+        
+        # Categories of queries that benefit from web search
+        time_sensitive_patterns = [
+            # Current information
+            r"current", r"latest", r"recent", r"today", r"now", r"present",
+            
+            # People in changing positions 
+            r"richest", r"poorest", r"president", r"ceo", r"leader", r"minister",
+            
+            # Changing metrics
+            r"price", r"cost", r"rate", r"value", r"stock", r"market cap",
+            
+            # Rankings that change
+            r"top \d+", r"best", r"worst", r"highest", r"lowest", r"ranked",
+            
+            # Time-relative references
+            r"this (year|month|week)"
+        ]
+        
+        # Check if query contains time-sensitive patterns
+        for pattern in time_sensitive_patterns:
+            if re.search(pattern, query_lower):
+                return True
+        
+        # For facts that need verification or might be context-dependent
+        factual_patterns = [
+            r"how many", r"when (did|was|will)", r"where is", 
+            r"what is the (population|size|area|distance)",
+            r"who (is|are) (the |currently |now )"
+        ]
+        
+        for pattern in factual_patterns:
+            if re.search(pattern, query_lower):
+                return True
+                
+        # Check for news-related or current events queries
+        news_keywords = ["news", "happened", "announced", "released", "launched", 
+                        "election", "war", "disaster", "event", "update"]
+                        
+        if any(keyword in query_lower for keyword in news_keywords):
+            return True
+            
+        # Check for explicit year mentions (likely needs current info)
+        year_pattern = r"\b20\d{2}\b"
+        if re.search(year_pattern, query_lower):
+            return True
+            
+        # Check for corrections or contradictions to previous information
+        correction_patterns = [
+            r"actually", r"no,", r"incorrect", r"wrong", r"not true", 
+            r"that's not", r"that is not", r"isn't", r"is not"
+        ]
+        
+        for pattern in correction_patterns:
+            if re.search(pattern, query_lower):
+                return True
+                
+        # List of search keywords from the original implementation that are still valid
+        search_keywords = [
+            "search", "find", "look up", "google", "internet", "web", "online",
+            "weather", "stock", "worth", "where can", "how to find", "where to buy"
+        ]
         
         # Check for search keywords
         for keyword in search_keywords:
             if keyword in query_lower:
                 return True
         
-        # Check if it's a general knowledge question
-        for pattern in general_knowledge_patterns:
-            if pattern in query_lower:
-                return False
-                
-        # Special handling for "who" questions about people - these often need search
-        if query_lower.startswith("who "):
-            return True
-            
-        # Special handling for questions about events and competitions
-        if any(term in query_lower for term in ["mr.", "mr ", "miss", "ms.", "ms ", "competition", "contest"]):
-            return True
-        
-        # Check for specific date/time references that would need current info
-        date_patterns = ["2023", "2024", "this year", "this month", "this week", "today"]
-        for date in date_patterns:
-            if date in query_lower:
-                return True
-        
         # Default to not using search for simple queries
-        # Count the number of words - longer queries are more likely to need search
-        word_count = len(query_lower.split())
-        
-        # If it's a very short query (1-3 words), it's likely a simple command or greeting
-        if word_count <= 3:
-            return False
-        
-        # If it's a very long query (>15 words), it's likely a complex question that might need search
-        if word_count > 15:
-            return True
-        
-        # For medium-length queries, be conservative and don't use search by default
         return False
     
     def format_search_results(self, results: Dict[str, Any]) -> str:
@@ -256,7 +291,7 @@ class SearchChain:
         
         # Format chat history for context
         formatted_history = ""
-        for msg in chat_history[-5:]:  # Use last 5 messages for context
+        for msg in chat_history[-7:]:  # Use last 5 messages for context
             role = "User" if msg["role"] == "user" else "Assistant"
             formatted_history += f"{role}: {msg['message']}\n"
         
@@ -342,48 +377,10 @@ class SearchChain:
                     "is_url_processing": True
                 }
             
-            # Create a prompt template for URL processing
-            url_prompt_template = PromptTemplate(
-                input_variables=["url", "content", "question", "chat_history", "language", "personality"],
-                template="""
-                {personality}
-                
-                You MUST embody the personality described above in ALL your responses, regardless of the URL content.
-                
-                You are an AI assistant that helps users understand content from URLs.
-                
-                CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
-                
-                URL: {url}
-                
-                Content from the URL:
-                ---------------------
-                {content}
-                ---------------------
-                
-                User's question: {question}
-                
-                Previous conversation:
-                ---------------------
-                {chat_history}
-                ---------------------
-                
-                Based on the content from the URL and the previous conversation, provide a helpful response to the user's request.
-                If the user asked to summarize, provide a concise summary of the main points.
-                If the user asked a specific question about the content, answer it based on the information provided.
-                If the content is not relevant to the request, explain why and provide the best response you can.
-                
-                CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning.
-                The personality should affect HOW you respond, not WHAT information you provide.
-                
-                Remember to respond in {language}.
-                """
-            )
-            
             # Create a chain for URL processing
             url_chain = LLMChain(
                 llm=self.llm,
-                prompt=url_prompt_template
+                prompt=self.url_template
             )
             
             # Format chat history for context
@@ -417,6 +414,57 @@ class SearchChain:
                 "is_url_processing": True
             }
 
+    def enhance_search_query(self, original_query: str) -> str:
+        """
+        Enhance a search query with appropriate time context
+        
+        Args:
+            original_query: The original user query
+            
+        Returns:
+            str: Enhanced query optimized for web search
+        """
+        query_lower = original_query.lower()
+        
+        # Get current date information
+        now = datetime.now()
+        current_year = now.year
+        current_month = now.month
+        
+        # First check if the query already contains a year
+        year_pattern = r"\b20\d{2}\b"
+        has_year = re.search(year_pattern, query_lower)
+        
+        # Check if this is a query that would benefit from time context
+        time_sensitive_keywords = [
+            "current", "latest", "recent", "now", "present",
+            "richest", "poorest", "president", "ceo", "leader",
+            "price", "cost", "rate", "value", "worth",
+            "top", "best", "worst", "highest", "lowest", "ranked",
+            "winner", "champion", "record"
+        ]
+        
+        needs_time_context = any(keyword in query_lower for keyword in time_sensitive_keywords)
+        
+        # If the query needs time context and doesn't already have a year, add the current year
+        if needs_time_context and not has_year:
+            enhanced_query = f"{original_query} {current_year} current"
+        else:
+            enhanced_query = original_query
+            
+        # Add search optimization terms for certain query types
+        if re.search(r"who (is|are) (the )?richest", query_lower) or "top richest" in query_lower:
+            enhanced_query += " forbes billionaires list net worth"
+            
+        elif re.search(r"who (is|are) (the )?(president|prime minister|leader)", query_lower):
+            enhanced_query += " current official"
+            
+        elif re.search(r"(price|cost|value) of", query_lower):
+            enhanced_query += " current market price"
+            
+        # Return the enhanced query
+        return enhanced_query
+        
     def search_with_web(self, query: str, chat_history: List[Dict[str, Any]], language: str = "English") -> Dict[str, Any]:
         """
         Search the web and generate a response with full conversation context
@@ -431,55 +479,7 @@ class SearchChain:
         """
         try:
             # First, generate a better search query based on the conversation context
-            context_prompt_template = PromptTemplate(
-                input_variables=["query", "chat_history", "current_year"],
-                template="""
-                You are an AI assistant that helps formulate better search queries based on conversation context.
-                
-                Current user query: {query}
-                
-                Previous conversation:
-                ---------------------
-                {chat_history}
-                ---------------------
-                
-                Current year: {current_year}
-                
-                Based on the current query and the conversation history, create an improved search query that:
-                1. Captures the full context of what the user is asking about
-                2. EXPLICITLY includes the current year or "latest" or "current" when the query is about recent events, people, competitions, or other time-sensitive information
-                3. Avoids using time context from previous messages unless the user is SPECIFICALLY asking about historical information
-                4. Is optimized for web search engines
-                
-                Return ONLY the improved search query without any explanation or additional text.
-                """
-            )
-            
-            # Create a chain for generating contextual search queries
-            context_chain = LLMChain(
-                llm=self.llm,
-                prompt=context_prompt_template
-            )
-            
-            # Format chat history for context
-            formatted_history = ""
-            for msg in chat_history[-5:]:  # Use last 5 messages for context
-                role = "User" if msg["role"] == "user" else "Assistant"
-                formatted_history += f"{role}: {msg['message']}\n"
-            
-            # Get current year for time context
-            from datetime import datetime
-            current_year = datetime.now().year
-            
-            # Generate the improved search query
-            improved_query_response = context_chain.invoke({
-                "query": query,
-                "chat_history": formatted_history,
-                "current_year": current_year
-            })
-            
-            # Extract the improved query
-            improved_query = improved_query_response["text"].strip()
+            improved_query = self.enhance_search_query(query)
             
             # Log the original and improved queries for debugging
             st.info(f"Original query: {query}")
@@ -488,7 +488,13 @@ class SearchChain:
             # Perform the web search with the improved query
             search_results = self.web_search_tool.search(improved_query)
             
-            # Generate the response
+            # Format chat history for context
+            formatted_history = ""
+            for msg in chat_history[-5:]:  # Use last 5 messages for context
+                role = "User" if msg["role"] == "user" else "Assistant"
+                formatted_history += f"{role}: {msg['message']}\n"
+            
+            # Generate the answer
             response = self.search_chain.invoke({
                 "question": query,  # Use the original question for response generation
                 "search_results": self.format_search_results(search_results),
