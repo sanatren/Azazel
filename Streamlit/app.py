@@ -10,6 +10,7 @@ from langchain_community.chat_models import ChatOpenAI
 from openai import OpenAI
 import docx
 import tempfile
+import base64
 
 # Create a function to get language instruction
 def get_language_instruction(language):
@@ -1516,7 +1517,66 @@ if st.session_state.get(f"previous_personality_{st.session_state.current_session
     st.session_state[f"previous_personality_{st.session_state.current_session}"] = current_personality
 
 # Main Chat Interface
-st.title("🤖 Azazel")
+import base64
+import os
+
+# Function to load and encode the logo image
+def get_base64_encoded_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode('utf-8')
+
+# Add this right before the title section
+# Create directory for images if it doesn't exist
+os.makedirs('Streamlit/static', exist_ok=True)
+
+# Get current directory path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Define possible logo paths and try each one
+possible_logo_paths = [
+    os.path.join(current_dir, 'static', 'azaz.png'),
+    os.path.join(current_dir, 'static', 'logo.png'),
+    os.path.join(current_dir, 'static', 'azazel_logo.png'),
+    os.path.join(os.path.dirname(current_dir), 'static', 'azaz.png'),  # Try one level up
+    os.path.join(os.path.dirname(current_dir), 'static', 'logo.png'),  # Try one level up
+]
+
+# Check each possible logo path
+logo_found = False
+logo_path = None
+
+for path in possible_logo_paths:
+    if os.path.exists(path):
+        logo_path = path
+        logo_found = True
+        break
+
+# Check if the logo exists, if not use a placeholder with a message
+if logo_found:
+    try:
+        base64_logo = get_base64_encoded_image(logo_path)
+        st.markdown(
+            f"""
+            <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                <img src="data:image/png;base64,{base64_logo}" alt="Azazel Logo" width="48" height="48" style="margin-right: 10px;">
+                <h1 style="margin: 0; font-size: 2.5rem;">Azazel</h1>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+    except Exception as e:
+        st.error(f"Error loading logo: {e}")
+        st.title("🤖 Azazel")  # Fallback to emoji
+else:
+    st.warning("""
+    Logo file not found. Please place your logo in one of these locations:
+    - Streamlit/static/azaz.png
+    - Streamlit/static/logo.png
+    - Streamlit/static/azazel_logo.png
+    """)
+    st.title("🤖 Azazel")  # Fallback to emoji
+
+# Continue with the rest of the code
 st.subheader(st.session_state.current_session_name)
 
 chat_history = get_chat_history_from_supabase(st.session_state.current_session)
