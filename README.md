@@ -39,7 +39,8 @@ LangChain (RAG + memory)
 
 Streamlit (sleek UI)
 
-[click here for Azazel]{https://azazel.streamlit.app/}
+[Azazel](https://azazel.streamlit.app/)
+
 
 
 
