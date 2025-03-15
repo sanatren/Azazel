@@ -1,4 +1,4 @@
-# Azazel
+# Azazel  
 
 Supercharging Legacy Models with multimodal capabilities
 
@@ -39,6 +39,7 @@ LangChain (RAG + memory)
 
 Streamlit (sleek UI)
 
+[click here for Azazel]{https://azazel.streamlit.app/}
 
 
 
