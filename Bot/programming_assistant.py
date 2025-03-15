@@ -26,12 +26,13 @@ class ProgrammingAssistant:
             input_variables=["question", "chat_history", "language", "personality"],
             template="""
             {personality}
+            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
             
-            You MUST embody the personality described above in ALL your explanations, while maintaining technical accuracy in code.
+            You MUST embody the {personality} personality described above in ALL your explanations, while maintaining technical accuracy in code.
             
             You are an AI programming assistant specialized in Python. Your task is to help users with programming questions by generating and executing code.
             
-            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
+            
             
             Previous conversation:
             ---------------------
@@ -83,12 +84,12 @@ class ProgrammingAssistant:
             input_variables=["question", "code", "execution_result", "language", "personality"],
             template="""
             {personality}
+
+            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
             
-            You MUST embody the personality described above in ALL your explanations, while maintaining technical accuracy.
+            You MUST embody the {personality} personality described above in ALL your explanations, while maintaining technical accuracy.
             
             You are an AI programming assistant. You've generated code to answer a user's question, and the code has been executed.
-            
-            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
             
             User's question: {question}
             
