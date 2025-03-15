@@ -51,28 +51,10 @@ class VisionProcessor:
             return []
 
         try:
-            # Enhanced prompt to explicitly instruct the model to describe the image
-            enhanced_query = f"""Please analyze and describe the following image in detail.
-            
-Original query: "{query}"
-
-Instructions:
-1. Describe what you see in the image with specific details
-2. Mention colors, objects, people, clothing, backgrounds, and any notable features
-3. Provide a comprehensive description that directly answers the query
-4. Never say you cannot see or access the image - you CAN see the image
-5. If asked about something not in the image, clarify what IS in the image instead
-
-Always respond as if you can see the image, because you CAN see the image that was uploaded.
-"""
-
             messages = [{
-                "role": "system",
-                "content": "You are a vision-enabled assistant that can see and describe images in detail. You should ALWAYS provide detailed descriptions of images when asked about them."
-            }, {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": enhanced_query},
+                    {"type": "text", "text": query},
                     *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{self.encode_image(img_path)}"}} 
                       for img_path in self.image_store[session_id]]
                 ]

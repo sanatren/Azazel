@@ -12,7 +12,7 @@ class RAGChain:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.document_processor = DocumentProcessor()
-        self.llm = ChatOpenAI(model="gpt-3.5-turbo", openai_api_key=api_key, temperature=0.5)
+        self.llm = ChatOpenAI(model="gpt-4", openai_api_key=api_key, temperature=0.5)
         self.personality = "You are a helpful assistant."
         
         self.prompt_template = PromptTemplate(
@@ -61,13 +61,8 @@ class RAGChain:
         # Check for common document-related query patterns
         query_lower = query.lower()
         
-        # If force_rag is enabled in the Streamlit session state, always consider relevant
-        if st.session_state.get("force_rag", False):
-            return True
-        
         # Image-related keywords
-        image_keywords = ["image", "picture", "photo", "graphic", "visual", "diagram", "figure", 
-                         "illustration", "appearance", "wearing", "looks", "scene", "background"]
+        image_keywords = ["image", "picture", "photo", "graphic", "visual", "diagram", "figure", "illustration"]
         if has_images and any(kw in query_lower for kw in image_keywords):
             return True
             
@@ -79,102 +74,26 @@ class RAGChain:
             "based on the document", "from the document", "in the document", "the document mentions",
             "tell me about the document", "explain the document", "analyze the document",
             "what is the main point", "key points", "main ideas", "important information",
-            "resume", "cv", "report", "paper", "article", "letter", "email", "memo",
-            "suitable", "appropriate", "good for", "match", "fit", "compatible"
+            "resume", "cv", "report", "paper", "article", "letter", "email", "memo"
         ]
         
         if has_docs and any(kw in query_lower for kw in doc_keywords):
             return True
             
-        # Check for questions that are likely about the document or image content
-        question_starters = ["what", "who", "where", "when", "why", "how", "is", "are", "can", 
-                            "could", "would", "should", "tell me", "describe", "explain"]
-        if (has_docs or has_images) and any(query_lower.startswith(starter) for starter in question_starters):
-            # For questions, use more permissive matching
-            return True
+        # Check for questions that are likely about the document content
+        question_starters = ["what", "who", "where", "when", "why", "how", "is", "are", "can", "could", "would", "should", "tell me"]
+        if has_docs and any(query_lower.startswith(starter) for starter in question_starters):
+            # For questions, use semantic search with a more permissive threshold
+            docs = self.document_processor.query_documents(query, session_id, k=1)
+            if docs and docs[0]["score"] < 0.8:  # More permissive threshold (0.8 instead of 0.7)
+                return True
                 
         # For very short queries (likely follow-up questions), be more permissive
         if len(query_lower.split()) < 5:
             return True
                 
-        # Default case: if we have any content, treat it as relevant for safety
-        return True
-
-    def get_relevant_documents(self, question: str, session_id: str, k: int = 5) -> List:
-        """
-        Get relevant documents for a question with configurable number of results
-        
-        Args:
-            question: The user's question
-            session_id: The session ID
-            k: Number of document chunks to retrieve (default: 5)
-            
-        Returns:
-            List of document chunks
-        """
-        # Determine appropriate chunk size based on query complexity
-        query_words = len(question.split())
-        
-        # For complex queries (longer questions), retrieve larger chunks for more context
-        # For simple queries, retrieve smaller chunks for more precise answers
-        if query_words > 15:  # Complex question
-            chunk_size = 1500  # Larger chunk size
-        elif query_words > 8:  # Medium complexity
-            chunk_size = 1000  # Default chunk size
-        else:  # Simple question
-            chunk_size = 800   # Smaller chunk size
-        
-        # Get text documents with dynamic chunk size
-        text_docs = self.document_processor.query_documents(
-            question, 
-            session_id, 
-            k=k,
-            chunk_size=chunk_size
-        )
-        
-        # Convert to the format expected by the template
-        converted_docs = []
-        for doc in text_docs:
-            try:
-                # Check if the document is already in the right format
-                if isinstance(doc, dict):
-                    if "content" in doc and "metadata" in doc:
-                        # Standard format from query_documents
-                        converted_docs.append({
-                            "page_content": doc["content"],
-                            "metadata": doc.get("metadata", {})
-                        })
-                    elif "page_content" in doc and "metadata" in doc:
-                        # Already in the right format
-                        converted_docs.append(doc)
-                    else:
-                        # Unknown format, try to adapt
-                        content = doc.get("content", doc.get("text", doc.get("page_content", "")))
-                        metadata = doc.get("metadata", {})
-                        if content:  # Only add if we found some content
-                            converted_docs.append({
-                                "page_content": content,
-                                "metadata": metadata
-                            })
-                elif hasattr(doc, "page_content") and hasattr(doc, "metadata"):
-                    # It's an object with the right attributes
-                    converted_docs.append({
-                        "page_content": doc.page_content,
-                        "metadata": doc.metadata
-                    })
-                else:
-                    # Try to convert any other format
-                    content = str(doc)
-                    converted_docs.append({
-                        "page_content": content,
-                        "metadata": {"source": "unknown"}
-                    })
-            except Exception as e:
-                # Log the error but continue with other documents
-                print(f"Error converting document: {e}")
-                continue
-        
-        return converted_docs
+        # Default case: if we only have images, use them
+        return has_images and not has_docs
 
     def answer_question(self, question: str, session_id: str, chat_history: List[Dict[str, str]], language: str = "English") -> Dict[str, Any]:
         """Generate answer with combined context"""
@@ -202,61 +121,31 @@ class RAGChain:
         }
         
     def _combine_contexts(self, text_docs: List, image_analysis: List) -> str:
-        """Combine text and image contexts with improved formatting"""
+        """Combine text and image contexts"""
         context = []
         
         if text_docs:
             # Group documents by source
             docs_by_source = {}
             for doc in text_docs:
-                try:
-                    if isinstance(doc, dict):
-                        if "metadata" in doc and "source" in doc["metadata"]:
-                            source = doc["metadata"]["source"]
-                        else:
-                            source = "Unknown Source"
-                        
-                        if source not in docs_by_source:
-                            docs_by_source[source] = []
-                        docs_by_source[source].append(doc)
-                    else:
-                        # For objects with metadata attribute
-                        source = getattr(doc, "metadata", {}).get("source", "Unknown Source")
-                        if source not in docs_by_source:
-                            docs_by_source[source] = []
-                        docs_by_source[source].append(doc)
-                except Exception as e:
-                    print(f"Error processing document: {e}")
-                    continue
+                source = doc['metadata']['source']
+                if source not in docs_by_source:
+                    docs_by_source[source] = []
+                docs_by_source[source].append(doc)
             
             # Add header for text documents
-            context.append("📄 TEXT DOCUMENTS ANALYSIS:")
+            context.append("Text Documents:")
             
             # Add content from each source
             for source, docs in docs_by_source.items():
-                context.append(f"\nDocument Source: {source}")
-                for i, doc in enumerate(docs):
-                    try:
-                        if isinstance(doc, dict):
-                            if "page_content" in doc:
-                                content = doc["page_content"]
-                            elif "content" in doc:
-                                content = doc["content"]
-                            else:
-                                content = str(doc)
-                        else:
-                            # Try to get page_content attribute
-                            content = getattr(doc, "page_content", str(doc))
-                        
-                        context.append(f"Content Section {i+1}: {content}")
-                    except Exception as e:
-                        print(f"Error extracting content: {e}")
-                        continue
+                context.append(f"\nDocument: {source}")
+                for doc in docs:
+                    context.append(f"Content: {doc['content']}")
         
         if image_analysis:
-            context.append("\n🖼️ IMAGE ANALYSIS:")
+            context.append("\nImage Analysis:")
             context.extend([
-                f"Image Description: {analysis['content']}"
+                f"Image Analysis: {analysis['content']}"
                 for analysis in image_analysis
             ])
         

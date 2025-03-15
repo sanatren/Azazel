@@ -165,15 +165,14 @@ class DocumentProcessor:
             st.error(f"Error extracting text from text file: {str(e)}")
             return ""
     
-    def query_documents(self, query: str, session_id: str, k: int = 8, chunk_size: int = None) -> List[Dict[str, Any]]:
+    def query_documents(self, query: str, session_id: str, k: int = 8) -> List[Dict[str, Any]]:
         """
-        Query documents for a session with configurable chunk size
+        Query documents for a session
         
         Args:
             query: The query string
             session_id: The session ID
             k: Number of documents to retrieve (increased default from 4 to 8)
-            chunk_size: Optional custom chunk size for this query (None uses default)
             
         Returns:
             List of documents with content and metadata
@@ -181,109 +180,38 @@ class DocumentProcessor:
         try:
             # Check if the vectorstore exists for this session
             if session_id not in self.vectorstores:
-                print(f"No vectorstore found for session {session_id}")
                 return []
             
             # Get the vectorstore
             vectorstore = self.vectorstores[session_id]
             
             # Query the vectorstore with a higher k to ensure multiple documents are considered
-            try:
-                results = vectorstore.similarity_search_with_score(query, k=k)
-            except Exception as search_error:
-                print(f"Error performing similarity search: {search_error}")
-                return []
+            results = vectorstore.similarity_search_with_score(query, k=k)
             
             # Format the results
             docs = []
             unique_sources = set()  # Track unique document sources
             
-            try:
-                # If a custom chunk size is specified and different from our default,
-                # we need to adjust the content returned
-                if chunk_size and chunk_size != 1000:  # 1000 is our default chunk size
-                    print(f"Using custom chunk size: {chunk_size} characters")
-                    
-                    # Process each document to adjust chunk size
-                    for doc, score in results:
-                        try:
-                            # Safely extract content and metadata
-                            if hasattr(doc, "page_content"):
-                                content = doc.page_content
-                                metadata = doc.metadata if hasattr(doc, "metadata") else {}
-                            elif isinstance(doc, dict):
-                                content = doc.get("page_content", doc.get("content", ""))
-                                metadata = doc.get("metadata", {})
-                            else:
-                                # Skip if we can't determine content format
-                                continue
-                            
-                            # Add to unique sources set
-                            source = metadata.get("source", "")
-                            if source:
-                                unique_sources.add(source)
-                            
-                            # For larger chunks, try to expand context if possible
-                            if chunk_size > 1000:
-                                # This is a simplified approach - in a real implementation,
-                                # you might want to retrieve neighboring chunks from the original text
-                                docs.append({
-                                    "content": content,  # In a real implementation, you'd expand this
-                                    "metadata": metadata,
-                                    "score": score
-                                })
-                            # For smaller chunks, truncate to the specified size
-                            elif chunk_size < 1000:
-                                # Simple truncation - in a real implementation, you might
-                                # want to do smarter truncation that preserves sentence boundaries
-                                truncated_content = content[:chunk_size]
-                                docs.append({
-                                    "content": truncated_content,
-                                    "metadata": metadata,
-                                    "score": score
-                                })
-                        except Exception as doc_error:
-                            print(f"Error processing document: {doc_error}")
-                            continue
-                else:
-                    # Use the default chunk size
-                    for doc, score in results:
-                        try:
-                            # Safely extract content and metadata
-                            if hasattr(doc, "page_content"):
-                                content = doc.page_content
-                                metadata = doc.metadata if hasattr(doc, "metadata") else {}
-                            elif isinstance(doc, dict):
-                                content = doc.get("page_content", doc.get("content", ""))
-                                metadata = doc.get("metadata", {})
-                            else:
-                                # Skip if we can't determine content format
-                                continue
-                            
-                            # Add to unique sources set
-                            source = metadata.get("source", "")
-                            if source:
-                                unique_sources.add(source)
-                            
-                            docs.append({
-                                "content": content,
-                                "metadata": metadata,
-                                "score": score
-                            })
-                        except Exception as doc_error:
-                            print(f"Error processing document: {doc_error}")
-                            continue
+            for doc, score in results:
+                source = doc.metadata.get("source", "")
                 
-                # Log the number of unique documents found
-                if len(unique_sources) > 0:
-                    print(f"Retrieved content from {len(unique_sources)} unique documents: {', '.join(unique_sources)}")
+                # Add to unique sources set
+                if source:
+                    unique_sources.add(source)
                 
-                return docs
-            except Exception as format_error:
-                print(f"Error formatting search results: {format_error}")
-                return []
+                docs.append({
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "score": score
+                })
+            
+            # Log the number of unique documents found
+            if len(unique_sources) > 0:
+                print(f"Retrieved content from {len(unique_sources)} unique documents: {', '.join(unique_sources)}")
+            
+            return docs
         except Exception as e:
-            print(f"Error querying documents: {str(e)}")
+            st.error(f"Error querying documents: {str(e)}")
             return []
     
     def has_documents(self, session_id: str) -> bool:

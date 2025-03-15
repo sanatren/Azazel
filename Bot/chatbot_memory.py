@@ -24,8 +24,19 @@ def get_model(api_key):
     """Get or create ChatOpenAI model with the given API key"""
     global model
     if model is None or model.openai_api_key != api_key:
+        # Get the selected model from session state if available
+        selected_model = "gpt-4"  # Default to GPT-4
+        if hasattr(st, 'session_state') and 'selected_model' in st.session_state:
+            model_map = {
+                "GPT-3.5 Turbo": "gpt-3.5-turbo",
+                "GPT-4": "gpt-4",
+                "GPT-4 Turbo": "gpt-4-turbo-preview",
+                "GPT-4o Mini": "gpt-4o-mini"
+            }
+            selected_model = model_map.get(st.session_state.selected_model, "gpt-4")
+            
         model = ChatOpenAI(
-            model="gpt-3.5-turbo", 
+            model=selected_model, 
             openai_api_key=api_key,
             streaming=True,  # Enable streaming
             temperature=0.7
@@ -167,11 +178,11 @@ def invoke_with_language(session_id, messages, language="English"):
             return "Error: API key not found"
         
         # Get the selected model from session state
-        selected_model = st.session_state.get("selected_model", "GPT-3.5 Turbo")
+        selected_model = st.session_state.get("selected_model", "GPT-4")
         model_name = {
              "GPT-3.5 Turbo": "gpt-3.5-turbo",
              "GPT-4": "gpt-4",
-             "GPT-4 Turbo": "gpt-4-turbo-preview",
+             "GPT-4 Turbo": "gpt-4-turbo",
              "GPT-4o Mini": "gpt-4o-mini" 
         }[selected_model]
         

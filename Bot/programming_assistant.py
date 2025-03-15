@@ -16,7 +16,7 @@ class ProgrammingAssistant:
         
         # Initialize the language model
         self.llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             openai_api_key=api_key,
             temperature=0.2
         )
@@ -127,73 +127,103 @@ class ProgrammingAssistant:
         Returns:
             bool: True if it's likely a programming question needing code, False otherwise
         """
-        import re
-        
-        # First, check for explicit programming requests
-        explicit_programming_patterns = [
-            r"\bcode\b.*\bfor\b", r"\bwrite\b.*\bprogram\b", r"\bfunction\b.*\bto\b",
-            r"\bimplement\b.*\balgorithm\b", r"\bdebug\b", r"\bsyntax\b", r"\bcompile\b",
-            r"\bcoding\b", r"\bscript\b.*\bto\b"
+        # Simple heuristic: check for programming-related keywords
+        programming_keywords = [
+            "code", "program", "function", "algorithm", "error", 
+            "debug", "implement", "script", "syntax", "variable", "class",
+            "object", "method", "library", "module", "import", "exception",
+            "loop", "array", "dictionary", "dataframe", "pandas",
+            "numpy", "matplotlib", "plot", "graph", "calculate", "compute"
         ]
         
-        for pattern in explicit_programming_patterns:
-            if re.search(pattern, question.lower()):
-                return True
-        
-        # Check for programming concepts that require code
-        programming_concepts = [
-            "algorithm", "function", "class", "method", "variable", "loop", "recursion",
-            "data structure", "api", "interface", "database query", "sql", "regex",
-            "parameter", "argument", "return value", "object", "exception", "module"
+        # Strong indicators that the user wants code
+        explicit_code_indicators = [
+            "write code", "write a program", "code example", "sample code",
+            "solve this", "write function", "implement function", "create algorithm",
+            "how would you code", "can you code", "coding challenge", "write script",
+            "in python", "using python", "python script", "python code", "javascript code",
+            "develop a", "programmatically", "automate", "function that", "snippet",
+            "code snippet", "class that", "method that", "solution in code"
         ]
         
-        # Only consider it programming if these concepts are paired with action verbs
-        action_verbs = [
-            "create", "write", "implement", "develop", "code", "build", "design", 
-            "fix", "solve", "optimize", "generate", "define", "declare"
+        # Keywords that indicate informational queries (not needing code execution)
+        informational_queries = [
+            "who is", "who are", "richest", "wealthiest", "billionaire", "millionaire",
+            "top 10", "top ten", "top 5", "top five", "show me", "tell me about",
+            "list of", "rank of", "ranking", "wealth", "net worth", "fortune", "money",
+            "what are the", "what is the", "person", "people", "individuals", "celebrities",
+            "business", "companies", "corporation", "population", "demographics", "statistics",
+            "famous", "popular", "influential", "powerful", "successful", "wealthy"
         ]
+        
+        # Keywords that indicate conceptual questions (not needing code execution)
+        conceptual_keywords = [
+            "what is", "why use", "difference between", "compare", "versus", "vs",
+            "better than", "advantages", "disadvantages", "history of", "when to use",
+            "purpose of", "explain", "definition", "concept", "theory", "principle"
+        ]
+        
+        # Keywords that indicate non-programming topics that should be excluded
+        non_programming_keywords = [
+            "olympia", "bodybuilding", "competition", "sport", "athlete", "championship",
+            "tournament", "winner", "won", "match", "game", "player", "team", "league",
+            "mr.", "mr ", "miss", "ms.", "champion", "title", "rank", "ranking",
+            "contest", "medal", "record", "sports", "season"
+        ]
+        
+        # Words that could be ambiguous (like "list" which could mean Python list or just enumeration)
+        ambiguous_terms = {
+            "list": ["python list", "create list", "initialize list", "empty list", "list comprehension", 
+                    "append to list", "list methods", "array list", "linked list", "list operations"],
+            "array": ["numpy array", "array operations", "array methods", "2d array", "initialize array"],
+            "function": ["define function", "create function", "write function", "function parameters"]
+        }
         
         question_lower = question.lower()
         
-        # Check for action verb + programming concept pairs
-        for verb in action_verbs:
-            for concept in programming_concepts:
-                if f"{verb} {concept}" in question_lower:
+        # First check for informational queries that should not trigger code
+        for keyword in informational_queries:
+            if keyword in question_lower:
+                # Check if also contains explicit programming indicators
+                if not any(indicator in question_lower for indicator in explicit_code_indicators):
+                    return False
+        
+        # Check if it contains non-programming keywords
+        for keyword in non_programming_keywords:
+            if keyword in question_lower:
+                return False
+        
+        # Check if it's a conceptual question about programming
+        for keyword in conceptual_keywords:
+            if keyword in question_lower:
+                return False
+        
+        # Check for explicit code indicators (strongest signal)
+        for phrase in explicit_code_indicators:
+            if phrase in question_lower:
+                return True
+        
+        # Handle ambiguous terms - only count if they appear in a programming context
+        for term, contexts in ambiguous_terms.items():
+            if term in question_lower:
+                # If term appears in isolation without programming context, don't count it
+                if not any(context in question_lower for context in contexts) and not any(kw in question_lower for kw in programming_keywords):
+                    continue
+                else:
                     return True
         
-        # Check if the question is asking for a list or information that shouldn't be code
-        information_patterns = [
-            r"who (is|are)", r"what (is|are)", r"list of", r"top \d+", 
-            r"give me", r"tell me about", r"show me", r"where", r"when", 
-            r"richest", r"largest", r"newest", r"oldest", r"best", r"worst",
-            r"arrange", r"sort", r"order", r"examples of", r"instances of"
-        ]
-        
-        for pattern in information_patterns:
-            if re.search(pattern, question_lower):
-                return False
-        
-        # Check libraries that often indicate programming tasks
-        if any(lib in question_lower for lib in ["pandas", "numpy", "tensorflow", "matplotlib", "sklearn"]):
-            return True
-            
-        # Check for programming language mentions paired with tasks
-        languages = ["python", "javascript", "java", "c++", "ruby", "php", "go", "rust", "c#"]
-        for lang in languages:
-            if lang in question_lower and any(v in question_lower for v in action_verbs):
+        # Check for other programming keywords
+        for keyword in programming_keywords:
+            if keyword in question_lower:
                 return True
-                
-        # Check for specific tasks that should NOT be treated as programming
-        non_programming_tasks = [
-            "list", "comparison", "difference between", "meaning of", "definition",
-            "explain", "summarize", "order", "arrange", "rank", "sort by"
-        ]
         
-        for task in non_programming_tasks:
-            if task in question_lower:
+        # If it starts with listing or question words without programming context, it's likely not a programming question
+        if any(question_lower.startswith(w) for w in ["list", "who", "when", "where", "what is", "what are", "show", "tell"]):
+            # Only if also contains programming keywords
+            if not any(kw in question_lower for kw in programming_keywords):
                 return False
         
-        # Default to not programming unless explicit indicators found
+        # Default to not treating as a programming question
         return False
     
     def extract_code_blocks(self, text: str) -> List[str]:
