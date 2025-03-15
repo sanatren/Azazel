@@ -19,12 +19,11 @@ class RAGChain:
             input_variables=["question", "context", "chat_history", "language", "personality"],
             template="""
             {personality}
+            CRITICAL INSTRUCTION: You must respond in {language}. All text outside of direct quotes must be in {language}.
             
-            You MUST embody the personality described above in ALL your responses, regardless of the document content.
+            You MUST embody the {personality} personality described above in ALL your responses, regardless of the document content.
             
             You are an AI assistant that answers questions using documents and images.
-            
-            CRITICAL INSTRUCTION: You must respond in {language}. All text outside of direct quotes must be in {language}.
             
             Available Context (which may include multiple documents and images):
             ---------------------
