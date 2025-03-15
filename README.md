@@ -1,10 +1,11 @@
-# TurboFusion
+# Azazel
 
-Supercharging GPT-3.5 Turbo with multimodal capabilities
+Supercharging Legacy Models with multimodal capabilities
 
-TurboFusion is your AI toolkit of choice that elevates GPT-3.5 Turbo to the next level. By integrating RAG (Retrieval-Augmented Generation), image processing (GPT-4o-mini vision), code execution, and web search, this project turns GPT-3.5 Turbo into a lean, mean, multimodal machine. From analyzing images, debugging code, to conversing with documents, TurboFusion makes GPT-3.5 Turbo more intelligent, quicker, and more flexible—without the heavyweight price tag. Ideal for devs who need to push the boundaries of what can be achieved with smaller models!
+Azazel is your AI toolkit of choice that elevates GPT-3.5 Turbo to the next level. By integrating RAG (Retrieval-Augmented Generation), image processing (GPT-4o-mini vision), code execution, and web search, this project turns GPT-3.5 Turbo into a lean, mean, multimodal machine. From analyzing images, debugging code, to conversing with documents, Azazel makes legacy
+models more intelligent, quicker, and more flexible—without the heavyweight price tag. Ideal for devs who need to push the boundaries of what can be achieved with smaller models!
 
-## Why TurboFusion?
+## Why Azazel?
 
 Advanced Image Analysis: Leverage GPT-4o-mini vision capabilities to analyze and interpret images, extracting meaningful insights and answering complex visual queries.
 
@@ -24,12 +25,13 @@ Model switching: Can change model according user needs for more complex or light
 
 Sentiment analysis: for mood-aware responses.
 
+Personality modes according to user
 
 ## Built With
 
 GPT-3.5 Turbo (supercharged)
 
-GPT-4o Vision (for image analysis)
+GPT-4o-mini Vision (for image analysis)
 
 OpenAI whisper (for STT)
 
@@ -37,10 +39,9 @@ LangChain (RAG + memory)
 
 Streamlit (sleek UI)
 
-### Future updates
 
 
-Personality modes according to user
+
 
 
 
