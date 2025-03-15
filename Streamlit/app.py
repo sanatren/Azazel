@@ -164,7 +164,6 @@ def generate_streaming_response(chain_type, question, chat_history, language, pe
         # Prepare the appropriate prompt based on chain type
         system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
         
-        # Add specific instructions based on the chain type
         if chain_type == "rag":
             # Determine appropriate chunk size based on query complexity
             query_words = len(question.split())
@@ -191,7 +190,7 @@ def generate_streaming_response(chain_type, question, chat_history, language, pe
                 k=k
             )
             
-            # Calculate total tokens to avoid exceeding context limits
+            # Calculate total chars to avoid exceeding context limits
             doc_content_list = []
             total_chars = 0
             max_chars = 12000  # Generous limit but still within token constraints
@@ -322,88 +321,427 @@ else:
     if not openai_api_key:
         st.sidebar.warning("OpenAI API key not found. Set OPENAI_API_KEY in .env file.")
 
-# Custom CSS
-st.markdown("""
-<style>
-/* Global background and font */
-body {
-    background-color: #f7f7f7;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+# --- REPLACED CUSTOM CSS WITH NEW DARK THEME & UI STYLING ---
+st.markdown(
+    """
+    <style>
+    /* Azazel Chat Interface for Streamlit */
+    /* Main color scheme variables */
+    :root {
+      --background: #121212;
+      --sidebar-bg: #1E1E1E;
+      --primary: #6C5CE7;
+      --secondary: #A29BFE;
+      --accent: #8A2BE2;
+      --text: #E4E4E4;
+      --muted-text: #A0A0A0;
+      --success: #00B894;
+      --error: #FF6B6B;
+      --warning: #FDCB6E;
+      --border: #333333;
+      --message-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+      
+      /* Shadow variables */
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+      
+      /* Spacing variables */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+    }
 
-/* Sidebar styling */
-.css-1d391kg {  /* container for the sidebar */
-    background-color: #f0f2f6;
-}
+    /* Global styles */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--background);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
 
-/* Chat message styling when using fallback markdown */
-.user-msg {
-    background-color: #d1e7dd;
-    padding: 10px 15px;
-    border-radius: 10px;
-    margin: 5px 0;
-    text-align: right;
-}
-.assistant-msg {
-    background-color: #fff;
-    padding: 10px 15px;
-    border-radius: 10px;
-    margin: 5px 0;
-    border: 1px solid #ececec;
-}
+    /* Chat Container - Make it wider */
+    .block-container {
+      max-width: 1200px !important;
+      padding-left: 5% !important;
+      padding-right: 5% !important;
+    }
 
-/* Button styling */
-div.stButton > button {
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-div.stButton > button:hover {
-    background-color: #45a049;
-}
+    /* Typography */
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--text);
+      font-weight: 600;
+    }
 
-/* Typing indicator animation */
-.typing-indicator {
-  display: inline-flex;
-  align-items: center;
-}
-.typing-indicator span {
-  height: 8px;
-  width: 8px;
-  margin: 0 2px;
-  background-color: #606060;
-  border-radius: 50%;
-  opacity: 0.4;
-  animation: typing 1.4s infinite both;
-}
+    h1 {
+      font-size: 24px;
+    }
 
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
+    h2 {
+      font-size: 22px;
+    }
 
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
+    h3 {
+      font-size: 20px;
+    }
 
-@keyframes typing {
-  0% { opacity: 0.4; transform: scale(1) }
-  50% { opacity: 1; transform: scale(1.2) }
-  100% { opacity: 0.4; transform: scale(1) }
-}
+    h4, h5, h6 {
+      font-size: 18px;
+    }
 
-/* Add a hidden div at the bottom to scroll to */
-.scroll-target {
-  height: 1px;
-  width: 100%;
-  margin-bottom: 300px; /* Extra space to ensure content isn't cut off */
-}
-</style>
-""", unsafe_allow_html=True)
+    p, div, span {
+      font-size: 15px;
+      line-height: 1.6;
+    }
 
-# Add global auto-scrolling JavaScript right after the CSS
+    small {
+      font-size: 12px;
+      color: var(--muted-text);
+    }
+
+    /* Streamlit specific overrides */
+    /* Main container */
+    .stApp {
+      background-color: var(--background);
+    }
+
+    /* Sidebar */
+    .css-1d391kg, .css-12oz5g7 {
+      background-color: var(--sidebar-bg) !important;
+      border-right: 1px solid var(--border);
+      width: 220px !important;
+    }
+
+    .sidebar .sidebar-content {
+      background-color: var(--sidebar-bg);
+      padding: var(--space-md);
+    }
+
+    /* Sidebar headers */
+    .sidebar h2 {
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: var(--space-sm);
+      margin-bottom: var(--space-md);
+    }
+
+    /* Sidebar sections */
+    .sidebar-section {
+      margin-bottom: var(--space-lg);
+    }
+
+    /* Input fields */
+    .stTextInput > div > div > input, 
+    .stTextArea > div > div > textarea {
+      background-color: var(--sidebar-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+
+    /* Buttons */
+    .stButton > button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: var(--space-sm) var(--space-md);
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .stButton > button:hover {
+      background-color: var(--accent);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+
+    /* Message input area */
+    .chat-input-container {
+      display: flex;
+      position: sticky;
+      bottom: 0;
+      background-color: var(--background);
+      padding: var(--space-md);
+      border-top: 1px solid var(--border);
+      z-index: 100;
+      width: 100%;
+    }
+
+    .chat-input {
+      flex-grow: 1;
+      background-color: var(--sidebar-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: var(--space-sm);
+      color: var(--text);
+      resize: none;
+      min-height: 60px;
+    }
+
+    .send-button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      margin-left: var(--space-sm);
+      padding: 0 var(--space-md);
+      cursor: pointer;
+    }
+
+    /* Chat message bubbles - Enhance width and highlighting */
+    .message-container {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      padding: var(--space-md);
+      width: 100%;
+    }
+
+    .message {
+      max-width: 95% !important;
+      padding: var(--space-lg);
+      border-radius: 8px;
+      box-shadow: var(--message-shadow);
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+
+    .user-message {
+      align-self: flex-end;
+      background-color: var(--primary);
+      border-top-right-radius: 2px;
+    }
+
+    .bot-message {
+      align-self: flex-start;
+      background-color: var(--sidebar-bg);
+      border-top-left-radius: 2px;
+    }
+
+    .message-meta {
+      font-size: 12px;
+      color: var(--muted-text);
+      margin-top: var(--space-xs);
+    }
+
+    /* Status indicators */
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: var(--space-xs);
+    }
+
+    .status-online {
+      background-color: var(--success);
+    }
+
+    .status-processing {
+      background-color: var(--warning);
+    }
+
+    .status-error {
+      background-color: var(--error);
+    }
+
+    /* Dividers */
+    hr {
+      border: 0;
+      height: 1px;
+      background-color: var(--border);
+      margin: var(--space-md) 0;
+    }
+
+    /* Custom select/dropdown */
+    .stSelectbox label {
+      color: var(--text);
+    }
+
+    .stSelectbox > div > div {
+      background-color: var(--sidebar-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--background);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary);
+    }
+
+    /* Streamlit chat component custom styling - Enhanced for wider display */
+    .stChatFloatingInputContainer {
+      background-color: var(--background);
+      border-top: 1px solid var(--border);
+      padding: var(--space-sm);
+      width: 100% !important;
+      max-width: 1000px !important;
+    }
+
+    .stChatInputContainer {
+      background-color: var(--sidebar-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100% !important;
+    }
+
+    /* Streamlit chat messages - make wider and more prominent */
+    .stChatMessage {
+      background-color: transparent;
+      margin-bottom: 16px !important;
+      padding: 0 !important;
+      width: 95% !important;
+      max-width: 95% !important;
+    }
+
+    .stChatMessage > div {
+      border-radius: 8px !important;
+      padding: var(--space-lg) !important;
+      box-shadow: var(--message-shadow) !important;
+      border: 1px solid var(--border) !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .stChatMessage > div:hover {
+      box-shadow: var(--shadow-md) !important;
+      transform: translateY(-1px);
+    }
+
+    .stChatMessage.user {
+      margin-left: auto !important;
+      margin-right: 0 !important;
+    }
+
+    .stChatMessage.assistant {
+      margin-left: 0 !important;
+      margin-right: auto !important;
+    }
+
+    .stChatMessage.user > div {
+      background-color: var(--primary) !important;
+      border-top-right-radius: 2px !important;
+      color: white !important;
+    }
+
+    .stChatMessage.assistant > div {
+      background-color: var(--sidebar-bg) !important;
+      border-top-left-radius: 2px !important;
+      color: var(--text) !important;
+    }
+
+    /* Add highlight effect to new messages */
+    @keyframes messageHighlight {
+      0% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.01); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .stChatMessage:last-child > div {
+      animation: messageHighlight 0.5s ease-out;
+    }
+
+    /* Main content area - Ensure it takes maximum width */
+    .main .block-container {
+      max-width: 1200px !important;
+      padding-left: 2rem !important;
+      padding-right: 2rem !important;
+      margin: 0 auto !important;
+    }
+
+    /* Chat header styling */
+    .stApp h1, .stApp h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    /* Toast notifications */
+    .toast {
+      position: fixed;
+      bottom: var(--space-lg);
+      right: var(--space-lg);
+      padding: var(--space-md);
+      border-radius: 8px;
+      box-shadow: var(--shadow-md);
+      z-index: 1000;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .toast-success {
+      background-color: var(--success);
+      color: white;
+    }
+
+    .toast-error {
+      background-color: var(--error);
+      color: white;
+    }
+
+    .toast-warning {
+      background-color: var(--warning);
+      color: var(--background);
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    /* Custom tabs */
+    .stTabs [data-baseweb="tab-list"] {
+      gap: var(--space-sm);
+      background-color: var(--background);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stTabs [data-baseweb="tab"] {
+      background-color: var(--sidebar-bg);
+      color: var(--text);
+      border-radius: 8px 8px 0 0;
+      padding: var(--space-sm) var(--space-md);
+    }
+
+    .stTabs [aria-selected="true"] {
+      background-color: var(--primary);
+      color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Add global auto-scrolling JavaScript right after the new CSS
 st.markdown("""
 <script>
     // Super aggressive scroll function that works in different contexts
@@ -688,13 +1026,13 @@ if "current_session" not in st.session_state:
             # Find matching predefined personality or set to custom
             found = False
             for option, text in personality_map.items():
-                if text == st.session_state.current_personality.split("\n\n")[0]:  # Only compare the first part before the directive
+                if text == st.session_state.current_personality.split("\n\n")[0]:
                     st.session_state.personality_option = option
                     found = True
                     break
             if not found:
                 st.session_state.personality_option = "Custom..."
-                st.session_state.custom_personality_text = st.session_state.current_personality.split("\n\n")[0]  # Strip directives
+                st.session_state.custom_personality_text = st.session_state.current_personality.split("\n\n")[0]
         else:
             st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
             st.session_state.personality_option = "Default (Helpful Assistant)"
@@ -752,11 +1090,10 @@ model_info = {
     "GPT-3.5 Turbo": "Fast and cost-effective for most tasks",
     "GPT-4": "More capable for complex tasks",
     "GPT-4 Turbo": "Latest model with current knowledge",
-    "GPT-4o Mini": "Lightweight version of GPT-40 for faster responses"  # Updated info
+    "GPT-4o Mini": "Lightweight version of GPT-40 for faster responses"
 }
 
 st.sidebar.info(f"📝 {model_info[selected_model]}")
-
 
 if api_key_input:
     if not api_key_input.startswith('sk-'):
@@ -900,7 +1237,7 @@ if session_options:
                 # Find matching predefined personality or set to custom
                 found = False
                 for option, text in personality_map.items():
-                    base_personality = selected_session["personality"].split("\n\n")[0]  # Only compare the first part
+                    base_personality = selected_session["personality"].split("\n\n")[0]
                     if text == base_personality:
                         st.session_state.personality_option = option
                         found = True
@@ -908,15 +1245,12 @@ if session_options:
                 
                 if not found:
                     st.session_state.personality_option = "Custom..."
-                    # Store just the base personality without directives for editing
                     st.session_state.custom_personality_text = base_personality
             else:
-                # Default personality if none is set for this session
                 st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
                 st.session_state[f"personality_{selected_session_id}"] = "You are a helpful, respectful, and honest assistant."
                 st.session_state.personality_option = "Default (Helpful Assistant)"
             
-            # Reset personality to the one for the new session or to default
             if "personality" in selected_session and selected_session["personality"]:
                 st.session_state.current_personality = selected_session["personality"]
                 st.session_state[f"personality_{selected_session_id}"] = selected_session["personality"]
@@ -956,40 +1290,33 @@ if len(existing_sessions) > 1:  # Only show if there's more than one session
             deleted_current_session = False
             
             for session_display in sessions_to_delete:
-                # Look up the full session object using our map
                 if session_display in session_display_map:
                     session = session_display_map[session_display]
                     session_id = session["session_id"]
                     
-                    # If deleting current session, flag for rerun and session change
                     if session_id == st.session_state.current_session:
                         deleted_current_session = True
                         need_rerun = True
                     
-                    # Delete the session
                     if delete_session(session_id):
                         st.sidebar.success(f"Deleted: {session.get('name', 'Untitled')}")
                         deleted_any = True
             
             if deleted_any:
-                # Only get remaining sessions if we deleted the current session or need to rerun
                 if deleted_current_session:
-                    # Get remaining sessions to switch to
                     remaining_sessions = get_all_sessions()
                     if remaining_sessions:
                         st.session_state.current_session = remaining_sessions[0]["session_id"]
                         st.session_state.current_session_name = remaining_sessions[0].get("name", "Untitled Chat")
                         st.session_state.current_language = remaining_sessions[0].get("language", "English")
                         
-                        # Reset personality to the one for the new session or to default
                         if "personality" in remaining_sessions[0] and remaining_sessions[0]["personality"]:
                             st.session_state.current_personality = remaining_sessions[0]["personality"]
                             st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = remaining_sessions[0]["personality"]
                             
-                            # Find matching predefined personality or set to custom
                             found = False
                             for option, text in personality_map.items():
-                                if text == remaining_sessions[0]["personality"].split("\n\n")[0]:  # Only compare the first part
+                                if text == remaining_sessions[0]["personality"].split("\n\n")[0]:
                                     st.session_state.personality_option = option
                                     found = True
                                     break
@@ -998,7 +1325,6 @@ if len(existing_sessions) > 1:  # Only show if there's more than one session
                                 st.session_state.personality_option = "Custom..."
                                 st.session_state.custom_personality_text = remaining_sessions[0]["personality"].split("\n\n")[0]
                         else:
-                            # Set to default personality if none is set for the new session
                             st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
                             st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = "You are a helpful, respectful, and honest assistant."
                             st.session_state.personality_option = "Default (Helpful Assistant)"
@@ -1011,22 +1337,19 @@ if st.sidebar.button("🗑️ Delete Current Chat"):
     if len(existing_sessions) > 1:
         current_session_id = st.session_state.current_session
         if delete_session(current_session_id):
-            # Set current session to the next available session
             remaining_sessions = [s for s in existing_sessions if s["session_id"] != current_session_id]
             if remaining_sessions:
                 st.session_state.current_session = remaining_sessions[0]["session_id"]
                 st.session_state.current_session_name = remaining_sessions[0].get("name", "Untitled Chat")
                 st.session_state.current_language = remaining_sessions[0].get("language", "English")
                 
-                # Reset personality to the one for the new session or to default
                 if "personality" in remaining_sessions[0] and remaining_sessions[0]["personality"]:
                     st.session_state.current_personality = remaining_sessions[0]["personality"]
                     st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = remaining_sessions[0]["personality"]
                     
-                    # Find matching predefined personality or set to custom
                     found = False
                     for option, text in personality_map.items():
-                        if text == remaining_sessions[0]["personality"].split("\n\n")[0]:  # Only compare the first part
+                        if text == remaining_sessions[0]["personality"].split("\n\n")[0]:
                             st.session_state.personality_option = option
                             found = True
                             break
@@ -1035,7 +1358,6 @@ if st.sidebar.button("🗑️ Delete Current Chat"):
                         st.session_state.personality_option = "Custom..."
                         st.session_state.custom_personality_text = remaining_sessions[0]["personality"].split("\n\n")[0]
                 else:
-                    # Set to default personality if none is set for the new session
                     st.session_state.current_personality = "You are a helpful, respectful, and honest assistant."
                     st.session_state[f"personality_{remaining_sessions[0]['session_id']}"] = "You are a helpful, respectful, and honest assistant."
                     st.session_state.personality_option = "Default (Helpful Assistant)"
@@ -1045,8 +1367,6 @@ if st.sidebar.button("🗑️ Delete Current Chat"):
 
 # Preferred language input
 st.sidebar.subheader("🌍 Language Settings")
-
-# Add a hint about available languages
 st.sidebar.caption("Type any language (e.g., Hindi, Spanish, French, etc.)")
 
 language = st.sidebar.text_input(
@@ -1056,13 +1376,10 @@ language = st.sidebar.text_input(
     help="The bot will respond in this language regardless of the language you use to ask questions."
 )
 
-# Add language validation and feedback
 if language and language != st.session_state.current_language:
-    # Convert first letter to uppercase for consistency
     language = language.strip().title()
     st.session_state.current_language = language
     
-    # Display test message in each language
     language_test_messages = {
         "English": "Language set to English. All responses will be in English.",
         "Spanish": "Idioma configurado a Español. Todas las respuestas serán en Español.",
@@ -1076,14 +1393,11 @@ if language and language != st.session_state.current_language:
         "Portuguese": "Idioma definido para Português. Todas as respostas serão em Português."
     }
     
-    # If we have a predefined message for this language, show it
     if language in language_test_messages:
         success_message = language_test_messages[language]
     else:
-        # For other languages, use a generic English message
         success_message = f"Now responding in {language}. All responses will be in {language}."
     
-    # Update the language in the database
     save_session_to_supabase(
         st.session_state.current_session,
         st.session_state.current_session_name,
@@ -1091,9 +1405,9 @@ if language and language != st.session_state.current_language:
     )
     
     st.sidebar.success(success_message)
-    st.rerun()  # Force a rerun to apply the language change
+    st.rerun()
 
-# Add a new tab in the sidebar for document upload
+# Document & Image Upload
 with st.sidebar.expander("📁 Document & Image Upload", expanded=False):
     uploaded_files = st.file_uploader(
         "Upload documents or images",
@@ -1109,10 +1423,7 @@ with st.sidebar.expander("📁 Document & Image Upload", expanded=False):
                     st.success(f"Processed {uploaded_file.name}")
                 else:
                     st.error(f"Failed to process {uploaded_file.name}")
-    
-    # Clear All Data button removed as requested
 
-# Add these options to your sidebar
 st.sidebar.markdown("### Advanced Options")
 st.sidebar.markdown("*Configure how the assistant processes your queries:*")
 
@@ -1137,13 +1448,10 @@ if st.sidebar.checkbox("Disable Code Execution", value=st.session_state.get("dis
 else:
     st.session_state.disable_code_execution = False
 
-# Add this after preferred language input in the sidebar
+# Personality Settings
 st.sidebar.subheader("🎭 Personality Settings")
-
-# Info about personalities
 st.sidebar.info("Choose how you want the AI to respond to you. Select a pre-defined personality or create your own.")
 
-# Personality selection options
 personality_options = [
     "Default (Helpful Assistant)",
     "Professional & Formal",
@@ -1156,7 +1464,6 @@ personality_options = [
     "Custom..."
 ]
 
-# Add personality selection with a default value
 selected_personality = st.sidebar.selectbox(
     "Choose AI Personality",
     options=personality_options,
@@ -1164,10 +1471,8 @@ selected_personality = st.sidebar.selectbox(
     help="Select how you want the AI to respond to your messages"
 )
 
-# Store the selected option for persistence
 st.session_state.personality_option = selected_personality
 
-# Custom personality input field (shown only when "Custom..." is selected)
 custom_personality = ""
 if selected_personality == "Custom...":
     st.sidebar.markdown("#### How to Write an Effective Personality")
@@ -1185,31 +1490,22 @@ if selected_personality == "Custom...":
         placeholder="Example: You are a witty assistant with deep knowledge of science. You use analogies and occasionally quote famous scientists.",
         help="Be specific about tone, style, and character traits you want the AI to exhibit"
     )
-    # Store the custom text for persistence
     st.session_state.custom_personality_text = custom_personality
 
-# Set the current personality in session state based on selection
 if selected_personality == "Custom...":
-    # Format custom personality for better results
     if custom_personality:
-        # Ensure it starts with "You are a" if not already
         if not custom_personality.lower().startswith("you are"):
             custom_personality = "You are " + custom_personality
-            
-        # Add importance directive to custom personalities
         custom_personality = custom_personality.strip() + "\n\nYou MUST maintain this personality in ALL your responses, regardless of the subject matter. This personality dictates HOW you respond, not WHAT information you provide."
         current_personality = custom_personality
     else:
         current_personality = "You are a helpful assistant."
 else:
-    # Add importance directive to predefined personalities too
     current_personality = personality_map[selected_personality] + "\n\nYou MUST maintain this personality in ALL your responses, regardless of the subject matter. This personality dictates HOW you respond, not WHAT information you provide."
 
-# Store the current personality in session state (only for this specific session)
 st.session_state.current_personality = current_personality
 st.session_state[f"personality_{st.session_state.current_session}"] = current_personality
 
-# Update personality in database when changed
 if st.session_state.get(f"previous_personality_{st.session_state.current_session}") != current_personality:
     save_session_to_supabase(
         st.session_state.current_session,
@@ -1217,441 +1513,453 @@ if st.session_state.get(f"previous_personality_{st.session_state.current_session
         st.session_state.current_language,
         current_personality
     )
-    # Store the previous personality with session ID in the key to make it session-specific
     st.session_state[f"previous_personality_{st.session_state.current_session}"] = current_personality
 
 # Main Chat Interface
 st.title("🤖 Azazel")
+st.subheader(st.session_state.current_session_name)
 
-# Add JavaScript for auto-scrolling BEFORE the API key check
-# This ensures it's always loaded regardless of API key status
-# Removed: JavaScript is now loaded globally near the top of the file
+chat_history = get_chat_history_from_supabase(st.session_state.current_session)
 
-if not st.session_state.openai_api_key:
-    st.error("Please enter your OpenAI API key in the sidebar to start chatting!")
-else:
-    st.subheader(st.session_state.current_session_name)
+# Create a container for chat messages
+chat_container = st.container()
+
+with chat_container:
+    for msg in chat_history:
+        with st.chat_message(msg["role"]):
+            st.write(msg["message"])
     
-    # Get chat history
-    chat_history = get_chat_history_from_supabase(st.session_state.current_session)
-    
-    # Create a container for chat messages
-    chat_container = st.container()
-    
-    # Display chat history
-    with chat_container:
-        for msg in chat_history:
-            with st.chat_message(msg["role"]):
-                st.write(msg["message"])
-        
-        # Override the scroll-target style to reduce the gap
-        st.markdown("""
+    st.markdown(
+        """
         <style>
-        /* Override to reduce the gap */
+        /* Override the scroll-target spacing if needed */
         .scroll-target {
-            margin-bottom: 50px !important; 
+          margin-bottom: 50px !important; 
         }
         </style>
-        """, unsafe_allow_html=True)
-        
-        # Add a scroll target div at the bottom for auto-scrolling
-        st.markdown('<div id="scroll-target" class="scroll-target"></div>', unsafe_allow_html=True)
-        
-        # Add an additional auto-scroll trigger specifically after displaying messages
-        st.markdown("""
-        <script>
-            // Immediate scroll trigger after messages are displayed
-            (function() {
-                console.log("Messages displayed - triggering scroll");
-                
-                // Try scrolling immediately and with slight delays
-                setTimeout(() => {
-                    if (window.superForceScroll) {
-                        window.superForceScroll();
-                    } else {
-                        window.scrollTo(0, document.body.scrollHeight);
-                    }
-                }, 100);
-                
-                setTimeout(() => {
-                    if (window.superForceScroll) {
-                        window.superForceScroll();
-                    } else {
-                        window.scrollTo(0, document.body.scrollHeight);
-                    }
-                }, 500);
-            })();
-        </script>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
     
-    # Check if we should use RAG (if documents have been uploaded)
+    st.markdown('<div id="scroll-target" class="scroll-target"></div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <script>
+        (function() {
+            console.log("Messages displayed - triggering scroll");
+            setTimeout(() => {
+                if (window.superForceScroll) {
+                    window.superForceScroll();
+                } else {
+                    window.scrollTo(0, document.body.scrollHeight);
+                }
+            }, 100);
+            
+            setTimeout(() => {
+                if (window.superForceScroll) {
+                    window.superForceScroll();
+                } else {
+                    window.scrollTo(0, document.body.scrollHeight);
+                }
+            }, 500);
+        })();
+    </script>
+    """, unsafe_allow_html=True)
+
+# Check if RAG is possible
+use_rag = False
+try:
+    if hasattr(rag_chain, "document_processor") and hasattr(rag_chain.document_processor, "vectorstores"):
+        use_rag = st.session_state.current_session in rag_chain.document_processor.vectorstores
+    else:
+        use_rag = rag_chain.has_documents_for_session(st.session_state.current_session)
+except Exception as e:
+    st.warning(f"Error checking document status: {e}")
     use_rag = False
-    try:
-        # First check if the rag_chain has the needed attributes
-        if hasattr(rag_chain, "document_processor") and hasattr(rag_chain.document_processor, "vectorstores"):
-            use_rag = st.session_state.current_session in rag_chain.document_processor.vectorstores
-        # Fallback method - use the has_documents_for_session method which should be more reliable
-        else:
-            use_rag = rag_chain.has_documents_for_session(st.session_state.current_session)
-    except Exception as e:
-        st.warning(f"Error checking document status: {e}")
-        use_rag = False
-    
-    # Add this after the chat history display
-    if use_rag:
-        st.info("📄 Document mode active: I'll use your uploaded documents to answer questions, but I can still chat about other topics too.")
-    
-    # Input area container
-    input_container = st.container()
-    with input_container:
-        # Create tabs for text and voice input
-        input_tab, voice_tab = st.tabs(["Text Input", "Voice Input"])
-        
-        with input_tab:
-            # Text input
-            if prompt := st.chat_input("Message Azazel..."):
-                # Display the user's message
-                with st.chat_message("user"):
-                    st.write(prompt)
-                
-                # Save user message to Supabase
-                save_message_to_supabase(
-                    st.session_state.current_session,
-                    "user",
-                    prompt
-                )
-                
-                # Store the message in session state for processing
-                st.session_state.pending_user_message = prompt
-                
-                # Rerun to process the message
-                st.rerun()
-        
-        with voice_tab:
-            # This will show the audio recorder directly without needing a button click
-            try:
-                recording_result = audio_handler.record_audio(duration=5)
-                
-                # Check if we got a recording
-                if recording_result and recording_result[0] is not None:
-                    audio_path, _ = recording_result
-                    
-                    # Process the recording with a timeout
-                    with st.spinner("Transcribing audio..."):
-                        try:
-                            # Set a timeout for transcription (30 seconds)
-                            import threading
-                            import time
-                            
-                            result = [None]
-                            def transcribe_with_timeout():
-                                result[0] = audio_handler.transcribe_audio(audio_path)
-                            
-                            thread = threading.Thread(target=transcribe_with_timeout)
-                            thread.start()
-                            
-                            # Wait for up to 30 seconds
-                            timeout = 30
-                            start_time = time.time()
-                            while thread.is_alive() and time.time() - start_time < timeout:
-                                time.sleep(0.1)
-                            
-                            if thread.is_alive():
-                                st.error(f"Transcription timed out after {timeout} seconds. Please try again.")
-                                transcript = None
-                            else:
-                                transcript = result[0]
-                        except Exception as e:
-                            st.error(f"Error during transcription: {str(e)}")
-                            transcript = None
-                    
-                    if transcript:
-                        st.success(f"Transcribed: {transcript}")
-                        
-                        # Add a button to send the transcript
-                        if st.button("Send this message"):
-                            # Display the transcript to the user
-                            with st.chat_message("user"):
-                                st.write(transcript)
-                                
-                            # Save user message
-                            save_message_to_supabase(
-                                st.session_state.current_session,
-                                "user",
-                                transcript
-                            )
-                            
-                            # Store the transcript in session state for processing
-                            st.session_state.pending_user_message = transcript
-                            
-                            # Rerun to process the message
-                            st.rerun()
-            except Exception as e:
-                st.error(f"Error with audio recording: {str(e)}")
-                st.info("Please make sure you have the necessary permissions for microphone access.")
 
-    # Modify the section where you handle the pending user message
-    if "pending_user_message" in st.session_state:
-        chat_history = get_chat_history_from_supabase(st.session_state.current_session)
-        
-        # Initialize sentiment analyzer if not already initialized
-        if "sentiment_analyzer" not in st.session_state:
-            from sentiment_analyzer import SentimentAnalyzer
-            st.session_state.sentiment_analyzer = SentimentAnalyzer()
-        
-        # Get sentiment analysis for the current message
-        sentiment_data = st.session_state.sentiment_analyzer.track_sentiment(
-            st.session_state.current_session,
-            st.session_state.pending_user_message
-        )
-        
-        # Determine processing mode
-        is_url = search_chain.is_url(st.session_state.pending_user_message) if search_chain else False
-        is_programming = programming_assistant.is_programming_question(st.session_state.pending_user_message)
-        
-        # Log the decision for transparency
-        if is_programming:
-            st.info("💻 Detected as a programming question")
-            
-        # Check for document/image availability
-        has_resources = rag_chain.has_documents_for_session(st.session_state.current_session)
-        
-        # Determine if RAG should be used - only if documents are available AND query is relevant
-        should_use_rag = False
-        has_images = rag_chain.has_images_for_session(st.session_state.current_session)
-        has_documents = rag_chain.document_processor.has_documents(st.session_state.current_session)
-        
-        if has_resources:
-            # If force_rag is enabled, always use RAG
-            if st.session_state.get("force_rag"):
-                should_use_rag = True
-                st.info("📄 Using document and image knowledge (forced)")
-            else:
-                # Check if the query is relevant to the documents with higher threshold for relevance
-                try:
-                    should_use_rag = rag_chain.is_relevant_to_documents(
-                        st.session_state.pending_user_message,
-                        st.session_state.current_session
-                    )
-                    if should_use_rag:
-                        st.info("📄 Using document knowledge (relevant query)")
-                except Exception as e:
-                    st.warning(f"Error checking document relevance: {e}")
-                    should_use_rag = False
-        
-        # Check if it needs a web search regardless of whether documents are available
-        needs_search = False
-        if search_chain:
-            if is_url:
-                needs_search = True
-                st.info("🔗 Processing URL")
-            elif st.session_state.get("force_search", False):
-                # Force search if requested regardless of documents
-                needs_search = True
-                should_use_rag = False  # Explicitly disable RAG when force_search is enabled
-                st.info("🌐 Using web search (forced)")
-            else:
-                # Check if the query matches web search criteria using our improved method
-                needs_search = search_chain.needs_search(st.session_state.pending_user_message)
-                if needs_search:
-                    st.info("🌐 Using web search for up-to-date information")
-            
-            # Important: If both RAG and web search are possible, make a smarter decision
-            # Only do conflict resolution if force_search is not enabled
-            if should_use_rag and needs_search and not st.session_state.get("force_search", False):
-                # Get the query text and analyze it
-                query_lower = st.session_state.pending_user_message.lower()
-                
-                # Time-sensitive keywords that should prioritize web search
-                time_keywords = ["current", "latest", "recent", "today", "now", "this year", "this month"]
-                has_time_keywords = any(kw in query_lower for kw in time_keywords)
-                
-                # Keywords for things that change frequently
-                dynamic_data_keywords = ["price", "stock", "value", "rank", "rating", "richest", "population"]
-                has_dynamic_keywords = any(kw in query_lower for kw in dynamic_data_keywords)
-                
-                # If the query is time-sensitive or about dynamic data, prioritize web search
-                if has_time_keywords or has_dynamic_keywords:
-                    should_use_rag = False
-                    st.info("🌐 Prioritizing web search for time-sensitive information")
-                # Otherwise, prefer documents (they're more reliable than web search)
-                else:
-                    needs_search = False
-                    st.info("📄 Prioritizing document knowledge over web search")
+if use_rag:
+    st.info("📄 Document mode active: I'll use your uploaded documents to answer questions, but I can still chat about other topics too.")
 
-        # Response generation logic
+input_container = st.container()
+with input_container:
+    input_tab, voice_tab = st.tabs(["Text Input", "Voice Input"])
+    
+    with input_tab:
+        if prompt := st.chat_input("Message Azazel..."):
+            with st.chat_message("user"):
+                st.write(prompt)
+            save_message_to_supabase(st.session_state.current_session, "user", prompt)
+            st.session_state.pending_user_message = prompt
+            st.rerun()
+    
+    with voice_tab:
         try:
-            response = None
+            recording_result = audio_handler.record_audio(duration=5)
             
-            # First try direct model response if no special processing needed
-            if not (should_use_rag or needs_search or is_url or is_programming):
-                response = direct_openai_response(
+            if recording_result and recording_result[0] is not None:
+                audio_path, _ = recording_result
+                with st.spinner("Transcribing audio..."):
+                    import threading
+                    import time
+                    
+                    result = [None]
+                    def transcribe_with_timeout():
+                        result[0] = audio_handler.transcribe_audio(audio_path)
+                    
+                    thread = threading.Thread(target=transcribe_with_timeout)
+                    thread.start()
+                    
+                    timeout = 30
+                    start_time = time.time()
+                    while thread.is_alive() and time.time() - start_time < timeout:
+                        time.sleep(0.1)
+                    
+                    if thread.is_alive():
+                        st.error(f"Transcription timed out after {timeout} seconds. Please try again.")
+                        transcript = None
+                    else:
+                        transcript = result[0]
+                
+                if transcript:
+                    st.success(f"Transcribed: {transcript}")
+                    if st.button("Send this message"):
+                        with st.chat_message("user"):
+                            st.write(transcript)
+                        save_message_to_supabase(st.session_state.current_session, "user", transcript)
+                        st.session_state.pending_user_message = transcript
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Error with audio recording: {str(e)}")
+            st.info("Please make sure you have the necessary permissions for microphone access.")
+
+if "pending_user_message" in st.session_state:
+    chat_history = get_chat_history_from_supabase(st.session_state.current_session)
+    if "sentiment_analyzer" not in st.session_state:
+        from sentiment_analyzer import SentimentAnalyzer
+        st.session_state.sentiment_analyzer = SentimentAnalyzer()
+    
+    sentiment_data = st.session_state.sentiment_analyzer.track_sentiment(
+        st.session_state.current_session,
+        st.session_state.pending_user_message
+    )
+    
+    is_url = search_chain.is_url(st.session_state.pending_user_message) if search_chain else False
+    is_programming = programming_assistant.is_programming_question(st.session_state.pending_user_message)
+    
+    if is_programming:
+        st.info("💻 Detected as a programming question")
+    
+    has_resources = rag_chain.has_documents_for_session(st.session_state.current_session)
+    
+    should_use_rag = False
+    has_images = rag_chain.has_images_for_session(st.session_state.current_session)
+    has_documents = rag_chain.document_processor.has_documents(st.session_state.current_session)
+    
+    if has_resources:
+        if st.session_state.get("force_rag"):
+            should_use_rag = True
+            st.info("📄 Using document and image knowledge (forced)")
+        else:
+            try:
+                should_use_rag = rag_chain.is_relevant_to_documents(
                     st.session_state.pending_user_message,
                     st.session_state.current_session
                 )
-            # Then handle special cases
-            elif is_url:
-                if search_chain:
-                    url = search_chain.extract_url(st.session_state.pending_user_message)
-                    with st.spinner(f"Processing URL: {url}"):
-                        # Use streaming for URL processing
-                        personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
-                        response = generate_streaming_response(
-                            "url",
-                            st.session_state.pending_user_message,
-                            chat_history,
-                            st.session_state.current_language,
-                            personality=personality,
-                            url=url
-                        )
-            elif is_programming:
-                # Pass the current personality to the programming assistant
-                with st.spinner("Analyzing programming question..."):
-                    # Use streaming response for programming
+                if should_use_rag:
+                    st.info("📄 Using document knowledge (relevant query)")
+            except Exception as e:
+                st.warning(f"Error checking document relevance: {e}")
+                should_use_rag = False
+    
+    needs_search = False
+    if search_chain:
+        if is_url:
+            needs_search = True
+            st.info("🔗 Processing URL")
+        elif st.session_state.get("force_search", False):
+            needs_search = True
+            should_use_rag = False
+            st.info("🌐 Using web search (forced)")
+        else:
+            needs_search = search_chain.needs_search(st.session_state.pending_user_message)
+            if needs_search:
+                st.info("🌐 Using web search for up-to-date information")
+        
+        if should_use_rag and needs_search and not st.session_state.get("force_search", False):
+            query_lower = st.session_state.pending_user_message.lower()
+            time_keywords = ["current", "latest", "recent", "today", "now", "this year", "this month"]
+            has_time_keywords = any(kw in query_lower for kw in time_keywords)
+            dynamic_data_keywords = ["price", "stock", "value", "rank", "rating", "richest", "population"]
+            has_dynamic_keywords = any(kw in query_lower for kw in dynamic_data_keywords)
+            
+            if has_time_keywords or has_dynamic_keywords:
+                should_use_rag = False
+                st.info("🌐 Prioritizing web search for time-sensitive information")
+            else:
+                needs_search = False
+                st.info("📄 Prioritizing document knowledge over web search")
+
+    try:
+        response = None
+        
+        if not (should_use_rag or needs_search or is_url or is_programming):
+            response = direct_openai_response(
+                st.session_state.pending_user_message,
+                st.session_state.current_session
+            )
+        elif is_url:
+            if search_chain:
+                url = search_chain.extract_url(st.session_state.pending_user_message)
+                with st.spinner(f"Processing URL: {url}"):
                     personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
                     response = generate_streaming_response(
-                        "programming",
+                        "url",
+                        st.session_state.pending_user_message,
+                        chat_history,
+                        st.session_state.current_language,
+                        personality=personality,
+                        url=url
+                    )
+        elif is_programming:
+            with st.spinner("Analyzing programming question..."):
+                personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                response = generate_streaming_response(
+                    "programming",
+                    st.session_state.pending_user_message,
+                    chat_history,
+                    st.session_state.current_language,
+                    personality=personality
+                )
+        elif needs_search:
+            if search_chain:
+                with st.spinner("Searching the web for information..."):
+                    personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                    response = generate_streaming_response(
+                        "web_search",
                         st.session_state.pending_user_message,
                         chat_history,
                         st.session_state.current_language,
                         personality=personality
                     )
-            # Check for web search needs first (prioritize web search over RAG)
-            elif needs_search:
-                # Handle web search logic
-                if search_chain:
-                    with st.spinner("Searching the web for information..."):
-                        # Use streaming response for web search
-                        personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
-                        response = generate_streaming_response(
-                            "web_search",
-                            st.session_state.pending_user_message,
-                            chat_history,
-                            st.session_state.current_language,
-                            personality=personality
-                        )
-                else:
-                    st.warning("Web search disabled. Please set up web search in the sidebar.")
-                    response = direct_openai_response(
-                        st.session_state.pending_user_message,
-                        st.session_state.current_session
+            else:
+                st.warning("Web search disabled. Please set up web search in the sidebar.")
+                response = direct_openai_response(
+                    st.session_state.pending_user_message,
+                    st.session_state.current_session
+                )
+        elif should_use_rag:
+            with st.spinner("Analyzing documents and images..."):
+                try:
+                    personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                    query_words = len(st.session_state.pending_user_message.split())
+                    if query_words > 20:
+                        chunk_size = 2000
+                        k = 6
+                    elif query_words > 15:
+                        chunk_size = 1500
+                        k = 8
+                    elif query_words > 8:
+                        chunk_size = 1000
+                        k = 10
+                    else:
+                        chunk_size = 800
+                        k = 12
+                    
+                    is_image_query = False
+                    image_keywords = [
+                        "image", "picture", "photo", "pic", "snapshot", "photograph", "shot", "visual",
+                        "wearing", "clothes", "dress", "outfit", "attire", "shirt", "pants", "shoes", "hat", "appearance", 
+                        "color", "background", "foreground", "scene", "setting", "logo", "pattern", "design",
+                        "person", "man", "woman", "boy", "girl", "child", "people", "guy", "lady", "object", "item",
+                        "figure", "character", "animal", "pet", "building", "structure", "tree", "plant", "car", "vehicle",
+                        "show", "display", "visible", "see", "look", "appears", "looks like", "shown", "depicted",
+                        "what is in the", "who is in", "what does it show", "describe", "explain the image",
+                        "what can you see", "tell me about the", "what's in the", "analyze this", "whats in this"
+                    ]
+                    
+                    query_lower = st.session_state.pending_user_message.lower()
+                    is_explicit_image_query = any(keyword in query_lower for keyword in image_keywords)
+                    is_general_description = has_images and (
+                        query_lower.startswith("describe") or 
+                        query_lower.startswith("tell me about") or 
+                        query_lower.startswith("what") or 
+                        query_lower.startswith("who") or
+                        query_lower.startswith("how") or
+                        "given image" in query_lower or
+                        "this image" in query_lower or
+                        "the image" in query_lower
                     )
-            elif should_use_rag:
-                # Pass the current personality to the RAG chain
-                with st.spinner("Analyzing documents and images..."):
-                    try:
-                        # Use streaming response for RAG
-                        personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
-                        
-                        # First check if there are images for this session
-                        has_images = rag_chain.has_images_for_session(st.session_state.current_session)
-                        has_documents = rag_chain.document_processor.has_documents(st.session_state.current_session)
-                        
-                        # Log resource status for debugging
-                        if has_images:
-                            print(f"Session {st.session_state.current_session} has uploaded images available")
-                        if has_documents:
-                                print(f"Session {st.session_state.current_session} has documents available")
-                        
-                        # Analyze query complexity to determine appropriate chunk size for text docs
-                        query_words = len(st.session_state.pending_user_message.split())
-                        if query_words > 20:  # Very complex question
-                            chunk_size = 2000  # Extra large chunk size
-                            k = 6  # Fewer chunks but larger ones
-                        elif query_words > 15:  # Complex question
-                            chunk_size = 1500  # Larger chunk size
-                            k = 8  # Standard number of chunks
-                        elif query_words > 8:  # Medium complexity
-                            chunk_size = 1000  # Default chunk size
-                            k = 10  # More chunks of standard size
-                        else:  # Simple question
-                            chunk_size = 800   # Smaller chunk size
-                            k = 12  # More chunks but smaller ones
-                        
-                        # Check for image-related queries
-                        image_keywords = [
-                            # Basic image terms
-                            "image", "picture", "photo", "pic", "snapshot", "photograph", "shot", "visual",
-                            
-                            # Visual elements
-                            "wearing", "clothes", "dress", "outfit", "attire", "shirt", "pants", "shoes", "hat", "appearance", 
-                            "color", "background", "foreground", "scene", "setting", "logo", "pattern", "design",
-                            
-                            # People and objects
-                            "person", "man", "woman", "boy", "girl", "child", "people", "guy", "lady", "object", "item",
-                            "figure", "character", "animal", "pet", "building", "structure", "tree", "plant", "car", "vehicle",
-                            
-                            # Visual actions
-                            "show", "display", "visible", "see", "look", "appears", "looks like", "shown", "depicted",
-                            
-                            # Questions about images
-                            "what is in the", "who is in", "what does it show", "describe", "explain the image",
-                            "what can you see", "tell me about the", "what's in the", "analyze this", "whats in this"
-                        ]
-                        
-                        query_lower = st.session_state.pending_user_message.lower()
-                        
-                        # Detect if the query is explicitly about images
-                        is_explicit_image_query = any(keyword in query_lower for keyword in image_keywords)
-                        
-                        # Detect if it's a general description request (for queries like "describe the image" without specific keywords)
-                        is_general_description = has_images and (
-                            query_lower.startswith("describe") or 
-                            query_lower.startswith("tell me about") or 
-                            query_lower.startswith("what") or 
-                            query_lower.startswith("who") or
-                            query_lower.startswith("how") or
-                            "given image" in query_lower or
-                            "this image" in query_lower or
-                            "the image" in query_lower
+                    
+                    if has_images and not has_documents:
+                        is_image_query = True
+                    else:
+                        is_image_query = has_images and (is_explicit_image_query or is_general_description)
+                    
+                    if is_image_query:
+                        st.info("Analyzing your images to answer the question...")
+                        image_analysis = rag_chain.document_processor.vision_processor.analyze_images(
+                            st.session_state.current_session, 
+                            st.session_state.pending_user_message
                         )
                         
-                        # Combine both detection methods
-                        is_image_query = has_images and (is_explicit_image_query or is_general_description)
-                        
-                        # If we have images but no text documents, always treat as image query
-                        if has_images and not has_documents:
-                            is_image_query = True
-                            print("No text documents but images available - treating as image query")
-                        
-                        # Set default response to None
-                        response = None
-                        
-                        # Process based on resources and query type
-                        if is_image_query:
-                            # Prioritize image analysis for image-related queries
-                            st.info("Analyzing your images to answer the question...")
+                        if image_analysis:
+                            language_instruction = get_language_instruction(st.session_state.current_language)
+                            system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
+                            doc_content = f"Image Analysis:\n{image_analysis[0]['content']}"
                             
-                            # Get image analysis directly
+                            if has_documents:
+                                try:
+                                    docs = rag_chain.get_relevant_documents(
+                                        st.session_state.pending_user_message,
+                                        st.session_state.current_session,
+                                        k=5
+                                    )
+                                    
+                                    if docs and len(docs) > 0:
+                                        doc_texts = []
+                                        for i, doc in enumerate(docs):
+                                            if isinstance(doc, dict) and "page_content" in doc:
+                                                content = doc["page_content"]
+                                            elif hasattr(doc, "page_content"):
+                                                content = doc.page_content
+                                            else:
+                                                continue
+                                            
+                                            doc_texts.append(f"Document {i+1}:\n{content}")
+                                        
+                                        if doc_texts:
+                                            doc_content += "\n\nDocument Analysis:\n" + "\n\n".join(doc_texts)
+                                            st.info("Analyzing both images and relevant documents together")
+                                except Exception as doc_err:
+                                    st.warning(f"Could not retrieve text documents: {doc_err}")
+                            
+                            system_prompt += f"\n\nYou have access to the following content. Use it to answer the user's question:\n\n{doc_content}"
+                            special_instructions = "\n\nIMPORTANT: You are capable of analyzing and describing images AND relevant documents. THE USER HAS UPLOADED CONTENT, AND YOU MUST REFER TO IT IN YOUR RESPONSE. Analyze both images and documents when answering the query. If the query relates images to documents (like 'is this image suitable for my resume'), be sure to address both aspects."
+                            system_prompt += special_instructions
+                            
+                            client = OpenAI(api_key=st.session_state.openai_api_key)
+                            selected_model_name = st.session_state.get("selected_model", "GPT-3.5 Turbo")
+                            model_name = available_models[selected_model_name]
+                            
+                            formatted_messages = [
+                                {"role": "system", "content": system_prompt}
+                            ]
+                            
+                            for msg in chat_history[-5:]:
+                                formatted_messages.append({"role": msg["role"], "content": msg["message"]})
+                            
+                            formatted_messages.append({"role": "user", "content": st.session_state.pending_user_message})
+                            
+                            with st.chat_message("assistant"):
+                                placeholder = st.empty()
+                                placeholder.markdown('<div class="typing-indicator"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
+                                
+                                stream = client.chat.completions.create(
+                                    model=model_name,
+                                    messages=formatted_messages,
+                                    temperature=0.7,
+                                    stream=True,
+                                )
+                                
+                                full_response = ""
+                                for chunk in stream:
+                                    if hasattr(chunk.choices[0].delta, "content"):
+                                        content = chunk.choices[0].delta.content
+                                        if content is not None:
+                                            full_response += content
+                                            placeholder.markdown(full_response)
+                                
+                                response = full_response
+                            
+                            if not image_analysis:
+                                response = None
+                        else:
+                            st.warning("Unable to analyze the image. Using general knowledge instead.")
+                            response = direct_openai_response(
+                                st.session_state.pending_user_message,
+                                st.session_state.current_session
+                            )
+                    elif has_documents:
+                        docs = None
+                        try:
+                            docs = rag_chain.get_relevant_documents(
+                                st.session_state.pending_user_message, 
+                                st.session_state.current_session, 
+                                k=k
+                            )
+                        except Exception as doc_err:
+                            st.error(f"Error retrieving documents: {doc_err}")
+                            docs = None
+                        
+                        if docs and len(docs) > 0:
+                            try:
+                                doc_content_list = []
+                                total_chars = 0
+                                max_chars = 12000
+                                
+                                for i, doc in enumerate(docs):
+                                    try:
+                                        if isinstance(doc, dict) and "page_content" in doc:
+                                            content = doc["page_content"]
+                                        elif hasattr(doc, "page_content"):
+                                            content = doc.page_content
+                                        else:
+                                            continue
+                                        
+                                        chunk_text = f"Document {i+1}:\n{content}"
+                                        if total_chars + len(chunk_text) < max_chars:
+                                            doc_content_list.append(chunk_text)
+                                            total_chars += len(chunk_text)
+                                        else:
+                                            break
+                                    except Exception as extract_err:
+                                        print(f"Error processing document chunk {i}: {extract_err}")
+                                        continue
+                                
+                                if doc_content_list:
+                                    doc_content = "\n\n".join(doc_content_list)
+                                    language_instruction = get_language_instruction(st.session_state.current_language)
+                                    system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
+                                    system_prompt += f"\n\nYou have access to the following documents. Use them to answer the user's question. IMPORTANT: Synthesize a complete answer using ALL available document pieces. If information seems incomplete or you need additional context that's not provided, mention this clearly.\n\n{doc_content}"
+                                    
+                                    response = generate_streaming_response(
+                                        "rag",
+                                        st.session_state.pending_user_message,
+                                        chat_history,
+                                        st.session_state.current_language,
+                                        personality=personality
+                                    )
+                                else:
+                                    docs = None
+                            except Exception as process_err:
+                                st.error(f"Error processing document content: {process_err}")
+                                docs = None
+                        
+                        if (not docs or len(docs) == 0) and has_images:
+                            st.info("No relevant text documents found, but analyzing available images...")
                             image_analysis = rag_chain.document_processor.vision_processor.analyze_images(
                                 st.session_state.current_session, 
                                 st.session_state.pending_user_message
                             )
                             
                             if image_analysis:
-                                # Get language instruction and create system prompt
-                                language_instruction = get_language_instruction(st.session_state.current_language)
-                                # Create a system prompt for this analysis
-                                system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
+                                if 'system_prompt' not in locals():
+                                    language_instruction = get_language_instruction(st.session_state.current_language)
+                                    system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
                                 
-                                # Add image analysis to the prompt
                                 doc_content = f"Image Analysis:\n{image_analysis[0]['content']}"
                                 
-                                # If text documents are available, also add relevant document content
                                 if has_documents:
                                     try:
-                                        # Get relevant documents
                                         docs = rag_chain.get_relevant_documents(
                                             st.session_state.pending_user_message,
                                             st.session_state.current_session,
                                             k=5
                                         )
                                         
-                                        # Add document content if available
                                         if docs and len(docs) > 0:
                                             doc_texts = []
                                             for i, doc in enumerate(docs):
-                                                # Safely access document content
                                                 if isinstance(doc, dict) and "page_content" in doc:
                                                     content = doc["page_content"]
                                                 elif hasattr(doc, "page_content"):
@@ -1667,306 +1975,95 @@ else:
                                     except Exception as doc_err:
                                         st.warning(f"Could not retrieve text documents: {doc_err}")
                                 
-                                # Prepare the system prompt with image analysis
                                 system_prompt += f"\n\nYou have access to the following content. Use it to answer the user's question:\n\n{doc_content}"
-                                
-                                # Define special instructions for image analysis
                                 special_instructions = "\n\nIMPORTANT: You are capable of analyzing and describing images AND relevant documents. THE USER HAS UPLOADED CONTENT, AND YOU MUST REFER TO IT IN YOUR RESPONSE. Analyze both images and documents when answering the query. If the query relates images to documents (like 'is this image suitable for my resume'), be sure to address both aspects."
-                                
-                                # Add this instruction to system prompt
                                 system_prompt += special_instructions
-                                
-                                # Pass the modified system prompt directly to OpenAI
-                                client = OpenAI(api_key=st.session_state.openai_api_key)
-                                
-                                # Get the selected model
-                                selected_model_name = st.session_state.get("selected_model", "GPT-3.5 Turbo")
-                                model_name = available_models[selected_model_name]
-                                
-                                # Format messages for API
-                                formatted_messages = [
-                                    {"role": "system", "content": system_prompt}
-                                ]
-                                
-                                # Add recent chat history
-                                for msg in chat_history[-5:]:
-                                    formatted_messages.append({"role": msg["role"], "content": msg["message"]})
-                                
-                                # Add the current message
-                                formatted_messages.append({"role": "user", "content": st.session_state.pending_user_message})
-                                
-                                # Make the API call with streaming
-                                with st.chat_message("assistant"):
-                                    placeholder = st.empty()
-                                    placeholder.markdown('<div class="typing-indicator"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
-                                    
-                                    stream = client.chat.completions.create(
-                                        model=model_name,
-                                        messages=formatted_messages,
-                                        temperature=0.7,
-                                        stream=True,
-                                    )
-                                    
-                                    # Process the stream
-                                    full_response = ""
-                                    for chunk in stream:
-                                        if hasattr(chunk.choices[0].delta, "content"):
-                                            content = chunk.choices[0].delta.content
-                                            if content is not None:
-                                                full_response += content
-                                                # Update the displayed message with the accumulated response
-                                                placeholder.markdown(full_response)
-                                    
-                                    # Use the full response
-                                    response = full_response
-                                
-                                # If image analysis failed
-                                if not image_analysis:
-                                    # Fall through to general knowledge if image analysis fails too
-                                    response = None
-                            else:
-                                st.warning("Unable to analyze the image. Using general knowledge instead.")
-                                response = direct_openai_response(
-                                    st.session_state.pending_user_message,
-                                    st.session_state.current_session
-                                )
-                        elif has_documents:
-                            # Try document retrieval for non-image queries or when documents are available
-                            docs = None
-                            try:
-                                docs = rag_chain.get_relevant_documents(
-                                    st.session_state.pending_user_message, 
-                                    st.session_state.current_session, 
-                                    k=k
-                                )
-                            except Exception as doc_err:
-                                st.error(f"Error retrieving documents: {doc_err}")
-                                docs = None
                             
-                            # Check if we got relevant documents
-                            if docs and len(docs) > 0:
-                                try:
-                                    # Calculate total tokens to avoid exceeding context limits
-                                    doc_content_list = []
-                                    total_chars = 0
-                                    max_chars = 12000  # Generous limit but still within token constraints
-                                    
-                                    # Format document chunks with priority to most relevant ones
-                                    for i, doc in enumerate(docs):
-                                        # Safely extract content from document
-                                        try:
-                                            # Check if doc is a dictionary or an object and access page_content accordingly
-                                            if isinstance(doc, dict) and "page_content" in doc:
-                                                content = doc["page_content"]
-                                            elif hasattr(doc, "page_content"):
-                                                content = doc.page_content
-                                            else:
-                                                # Skip this document if we can't determine its content format
-                                                continue
-                                            
-                                            chunk_text = f"Document {i+1}:\n{content}"
-                                            # Add most relevant chunks first, until we approach the limit
-                                            if total_chars + len(chunk_text) < max_chars:
-                                                doc_content_list.append(chunk_text)
-                                                total_chars += len(chunk_text)
-                                            else:
-                                                # Stop when we reach the character limit
-                                                break
-                                        except Exception as extract_err:
-                                            print(f"Error processing document chunk {i}: {extract_err}")
-                                            continue
-                                    
-                                    if doc_content_list:
-                                        doc_content = "\n\n".join(doc_content_list)
-                                        # Initialize system_prompt here with language_instruction
-                                        language_instruction = get_language_instruction(st.session_state.current_language)
-                                        system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
-                                        system_prompt += f"\n\nYou have access to the following documents. Use them to answer the user's question. IMPORTANT: Synthesize a complete answer using ALL available document pieces. If information seems incomplete or you need additional context that's not provided, mention this clearly.\n\n{doc_content}"
-                                        
-                                        response = generate_streaming_response(
-                                            "rag",
-                                            st.session_state.pending_user_message,
-                                            chat_history,
-                                            st.session_state.current_language,
-                                            personality=personality
-                                        )
-                                    else:
-                                        # Fall through to next section if no document contents could be processed
-                                        docs = None
-                                except Exception as process_err:
-                                    st.error(f"Error processing document content: {process_err}")
-                                    docs = None
+                            client = OpenAI(api_key=st.session_state.openai_api_key)
+                            selected_model_name = st.session_state.get("selected_model", "GPT-3.5 Turbo")
+                            model_name = available_models[selected_model_name]
                             
-                            # If document retrieval failed but images are available, try image analysis as fallback
-                            if (not docs or len(docs) == 0) and has_images:
-                                st.info("No relevant text documents found, but analyzing available images...")
-                                image_analysis = rag_chain.document_processor.vision_processor.analyze_images(
-                                    st.session_state.current_session, 
-                                    st.session_state.pending_user_message
+                            formatted_messages = [
+                                {"role": "system", "content": system_prompt}
+                            ]
+                            
+                            for msg in chat_history[-5:]:
+                                formatted_messages.append({"role": msg["role"], "content": msg["message"]})
+                            
+                            formatted_messages.append({"role": "user", "content": st.session_state.pending_user_message})
+                            
+                            with st.chat_message("assistant"):
+                                placeholder = st.empty()
+                                placeholder.markdown('<div class="typing-indicator"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
+                                
+                                stream = client.chat.completions.create(
+                                    model=model_name,
+                                    messages=formatted_messages,
+                                    temperature=0.7,
+                                    stream=True,
                                 )
                                 
-                                if image_analysis:
-                                    # Create a system prompt if not already defined
-                                    if 'system_prompt' not in locals():
-                                        # Get language instruction
-                                        language_instruction = get_language_instruction(st.session_state.current_language)
-                                        system_prompt = language_instruction + "\n\n" + (personality if personality else "You are a helpful assistant.")
-                                    
-                                    # Format the image analysis as a document
-                                    doc_content = f"Image Analysis:\n{image_analysis[0]['content']}"
-                                    
-                                    # If text documents are available, also add relevant document content
-                                    if has_documents:
-                                        try:
-                                            # Get relevant documents
-                                            docs = rag_chain.get_relevant_documents(
-                                                st.session_state.pending_user_message,
-                                                st.session_state.current_session,
-                                                k=5
-                                            )
-                                            
-                                            # Add document content if available
-                                            if docs and len(docs) > 0:
-                                                doc_texts = []
-                                                for i, doc in enumerate(docs):
-                                                    # Safely access document content
-                                                    if isinstance(doc, dict) and "page_content" in doc:
-                                                        content = doc["page_content"]
-                                                    elif hasattr(doc, "page_content"):
-                                                        content = doc.page_content
-                                                    else:
-                                                        continue
-                                                    
-                                                    doc_texts.append(f"Document {i+1}:\n{content}")
-                                                
-                                                if doc_texts:
-                                                    doc_content += "\n\nDocument Analysis:\n" + "\n\n".join(doc_texts)
-                                                    st.info("Analyzing both images and relevant documents together")
-                                        except Exception as doc_err:
-                                            st.warning(f"Could not retrieve text documents: {doc_err}")
-                                    
-                                    # Prepare the system prompt with content
-                                    system_prompt += f"\n\nYou have access to the following content. Use it to answer the user's question:\n\n{doc_content}"
-                                    
-                                    # Define special instructions
-                                    special_instructions = "\n\nIMPORTANT: You are capable of analyzing and describing images AND relevant documents. THE USER HAS UPLOADED CONTENT, AND YOU MUST REFER TO IT IN YOUR RESPONSE. Analyze both images and documents when answering the query. If the query relates images to documents (like 'is this image suitable for my resume'), be sure to address both aspects."
-                                    
-                                    # Add this instruction to system prompt
-                                    system_prompt += special_instructions
+                                full_response = ""
+                                for chunk in stream:
+                                    if hasattr(chunk.choices[0].delta, "content"):
+                                        content = chunk.choices[0].delta.content
+                                        if content is not None:
+                                            full_response += content
+                                            placeholder.markdown(full_response)
                                 
-                                # Pass the modified system prompt directly to OpenAI
-                                client = OpenAI(api_key=st.session_state.openai_api_key)
-                                
-                                # Get the selected model
-                                selected_model_name = st.session_state.get("selected_model", "GPT-3.5 Turbo")
-                                model_name = available_models[selected_model_name]
-                                
-                                # Format messages for API
-                                formatted_messages = [
-                                    {"role": "system", "content": system_prompt}
-                                ]
-                                
-                                # Add recent chat history
-                                for msg in chat_history[-5:]:
-                                    formatted_messages.append({"role": msg["role"], "content": msg["message"]})
-                                
-                                # Add the current message
-                                formatted_messages.append({"role": "user", "content": st.session_state.pending_user_message})
-                                
-                                # Make the API call with streaming
-                                with st.chat_message("assistant"):
-                                    placeholder = st.empty()
-                                    placeholder.markdown('<div class="typing-indicator"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
-                                    
-                                    stream = client.chat.completions.create(
-                                        model=model_name,
-                                        messages=formatted_messages,
-                                        temperature=0.7,
-                                        stream=True,
-                                    )
-                                    
-                                    # Process the stream
-                                    full_response = ""
-                                    for chunk in stream:
-                                        if hasattr(chunk.choices[0].delta, "content"):
-                                            content = chunk.choices[0].delta.content
-                                            if content is not None:
-                                                full_response += content
-                                                # Update the displayed message with the accumulated response
-                                                placeholder.markdown(full_response)
-                                    
-                                    # Use the full response
-                                    response = full_response
-                                
-                                # If image analysis failed
-                                if not image_analysis:
-                                    # Fall through to general knowledge if image analysis fails too
-                                    response = None
-                        
-                        # If no response has been generated, use general knowledge
-                        if response is None:
-                            st.warning("No relevant documents or images found for your query. Using general knowledge instead.")
-                            response = direct_openai_response(
-                                st.session_state.pending_user_message,
-                                st.session_state.current_session
-                            )
+                                response = full_response
+                            
+                            if not image_analysis:
+                                response = None
                     
-                    except Exception as e:
-                        st.error(f"Error in document and image analysis: {str(e)}")
-                        # Fall back to direct response
+                    if response is None:
+                        st.warning("No relevant documents or images found for your query. Using general knowledge instead.")
                         response = direct_openai_response(
                             st.session_state.pending_user_message,
                             st.session_state.current_session
                         )
-                    
-                    # Note: Web search logic has been moved higher in the priority order
-                    # to ensure Force Web Search always takes precedence over RAG
-
-            # If we got a response, display it
-            if response:
-                try:
-                    # Check if it's a streaming response object or a string
-                    if hasattr(response, "__iter__") and not isinstance(response, str):
-                        # Handle streaming response
-                        full_response = display_streaming_response(response)
-                        response = full_response  # Update response with the full text for DB
-                    else:
-                        # If we got a string response (error message, etc.), display it directly
-                        with st.chat_message("assistant"):
-                            st.write(response)
                 except Exception as e:
-                    st.error(f"Error displaying response: {str(e)}")
-                    response = f"I encountered an error while generating a response. Please try again."
+                    st.error(f"Error in document and image analysis: {str(e)}")
+                    response = direct_openai_response(
+                        st.session_state.pending_user_message,
+                        st.session_state.current_session
+                    )
+        
+        if response:
+            try:
+                if hasattr(response, "__iter__") and not isinstance(response, str):
+                    full_response = display_streaming_response(response)
+                    response = full_response
+                else:
                     with st.chat_message("assistant"):
                         st.write(response)
-                
-                # Save assistant response to database (only if it's a valid string)
-                if isinstance(response, str):
-                    save_message_to_supabase(
-                        st.session_state.current_session,
-                        "assistant",
-                        response
-                    )
-                else:
-                    save_message_to_supabase(
-                        st.session_state.current_session,
-                        "assistant",
-                        "Error generating response. Please try again."
-                    )
-                
-                # Update session metadata (restore this)
-                save_session_to_supabase(
+            except Exception as e:
+                st.error(f"Error displaying response: {str(e)}")
+                response = "I encountered an error while generating a response. Please try again."
+                with st.chat_message("assistant"):
+                    st.write(response)
+            
+            if isinstance(response, str):
+                save_message_to_supabase(
                     st.session_state.current_session,
-                    st.session_state.current_session_name,
-                    st.session_state.current_language
+                    "assistant",
+                    response
+                )
+            else:
+                save_message_to_supabase(
+                    st.session_state.current_session,
+                    "assistant",
+                    "Error generating response. Please try again."
                 )
             
-            # Clear the pending message
-            del st.session_state.pending_user_message
-            
-            # Rerun to refresh the chat
-            st.rerun()
+            save_session_to_supabase(
+                st.session_state.current_session,
+                st.session_state.current_session_name,
+                st.session_state.current_language
+            )
         
-        except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            st.info("Please try again with a different query.")
+        del st.session_state.pending_user_message
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error generating response: {str(e)}")
+        st.info("Please try again with a different query.")
