@@ -44,11 +44,11 @@ class SearchChain:
             template="""
             {personality}
             
-            You MUST embody the personality described above in ALL your responses, regardless of the web search content.
+            CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
+            
+            You MUST embody the {personality} personality described above in ALL your responses, regardless of the web search content.
             
             You are an AI assistant with the ability to search the web for up-to-date information.
-            
-            CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
             
             User's question: {question}
             
@@ -347,12 +347,11 @@ class SearchChain:
                 input_variables=["url", "content", "question", "chat_history", "language", "personality"],
                 template="""
                 {personality}
+                CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
                 
-                You MUST embody the personality described above in ALL your responses, regardless of the URL content.
+                You MUST embody the {personality} personality described above in ALL your responses, regardless of the URL content.
                 
                 You are an AI assistant that helps users understand content from URLs.
-                
-                CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
                 
                 URL: {url}
                 
