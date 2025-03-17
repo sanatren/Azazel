@@ -17,7 +17,7 @@ Real-Time Web Integration: Access and synthesize up-to-date information from the
 
 Multilingual Support: Seamlessly switch between languages for global accessibility and localized responses.
 
-Speech Integration: Convert text to speech for hands-free interaction, enhancing accessibility and user experience.
+Speech Integration: Convert speech to text for hands-free interaction, enhancing accessibility and user experience.
 
 Contextual Memory: Maintains conversation context across sessions, enabling coherent follow-ups and long-term interactions.
 
