@@ -132,18 +132,16 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Get OpenAI API key from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Initialize the search chain with the OpenAI API key from environment variables
+# Initialize Google API keys
 google_api_key = os.getenv("GOOGLE_API_KEY")
 google_cse_id = os.getenv("GOOGLE_CSE_ID")
 
-if google_api_key and google_cse_id and openai_api_key:
-    search_chain = SearchChain(openai_api_key, google_api_key, google_cse_id)
-else:
-    search_chain = None
-    if not google_api_key or not google_cse_id:
-        st.sidebar.warning("Web search disabled. Set GOOGLE_API_KEY and GOOGLE_CSE_ID in .env file to enable.")
-    if not openai_api_key:
-        st.sidebar.warning("OpenAI API key not found. Set OPENAI_API_KEY in .env file.")
+# The SearchChain will be initialized later after we have the user's API key
+search_chain = None
+
+# Check if Google API keys are present
+if not google_api_key or not google_cse_id:
+    st.sidebar.warning("Web search disabled. Set GOOGLE_API_KEY and GOOGLE_CSE_ID in .env file to enable.")
 
 # Custom CSS
 st.markdown(
@@ -944,6 +942,11 @@ if api_key_input:
         # Initialize the programming assistant after initializing the RAG chain
         programming_assistant = ProgrammingAssistant(api_key_input)
         
+        # Initialize the search chain if Google API keys are available
+        if google_api_key and google_cse_id:
+            search_chain = SearchChain(api_key_input, google_api_key, google_cse_id)
+            st.sidebar.success("Web search enabled")
+        
         st.sidebar.success("API key successfully validated!")
     except Exception as e:
         st.sidebar.error(f"Error initializing with API key: {str(e)}")
@@ -1569,14 +1572,23 @@ else:
         # Check if it needs a web search regardless of whether documents are available
         needs_search = False
         if search_chain:
+            st.info(f"Web search available, checking if query requires search...")
             if is_url:
+                st.info("URL detected in query, activating web search")
                 needs_search = True
             elif st.session_state.get("force_search", False):
                 # Force search if requested regardless of documents
+                st.info("Web search forced by user, activating web search")
                 needs_search = True
             else:
                 # Check if the query matches web search criteria
-                needs_search = search_chain.needs_search(st.session_state.pending_user_message)
+                try:
+                    st.info("Checking if query matches web search criteria...")
+                    needs_search = search_chain.needs_search(st.session_state.pending_user_message)
+                    st.info(f"Web search needed: {needs_search}")
+                except Exception as e:
+                    st.error(f"Error checking web search criteria: {str(e)}")
+                    needs_search = False
             
             # Important: If both RAG and web search are possible, prioritize web search
             # for queries that seem more suited for general web information

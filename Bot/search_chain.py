@@ -23,15 +23,15 @@ class SearchChain:
         Initialize the search chain
         
         Args:
-            api_key: OpenAI API key
-            google_api_key: Google API key
-            google_cse_id: Google Custom Search Engine ID
+            api_key: OpenAI API key (from the user)
+            google_api_key: Google API key (from the site owner)
+            google_cse_id: Google Custom Search Engine ID (from the site owner)
         """
         self.api_key = api_key
         self.web_search_tool = WebSearchTool(google_api_key, google_cse_id)
         self.personality = "You are a helpful assistant."
         
-        # Initialize the language model
+        # Initialize the language model with the user's API key
         self.llm = ChatOpenAI(
             model="gpt-4",
             openai_api_key=api_key,
@@ -120,7 +120,23 @@ class SearchChain:
             # Personal information and social media terms
             "social media", "profile", "account", "facebook", "twitter", "instagram",
             "linkedin", "github", "youtube", "tiktok", "snapchat", "reddit",
-            "available on", "find me", "my profile", "my account", "my social"
+            "available on", "find me", "my profile", "my account", "my social",
+            
+            # News and current events
+            "news", "breaking", "headlines", "report", "announced", "released",
+            "launched", "published", "confirmed", "revealed", "discovered",
+            
+            # Location and travel
+            "location", "address", "directions", "map", "near", "close to",
+            "distance", "travel", "trip", "visit", "tourist", "attraction",
+            
+            # Shopping and products
+            "buy", "purchase", "price", "cost", "available", "in stock",
+            "shipping", "delivery", "order", "product", "item", "store",
+            
+            # Technical and software
+            "download", "install", "update", "version", "release", "bug",
+            "feature", "update", "patch", "fix", "issue", "problem"
         ]
         
         # List of question types that can usually be answered without search
@@ -136,25 +152,30 @@ class SearchChain:
         # Check for search keywords
         for keyword in search_keywords:
             if keyword in query_lower:
+                st.info(f"Web search activated due to keyword: {keyword}")
                 return True
         
         # Check if it's a general knowledge question
         for pattern in general_knowledge_patterns:
             if pattern in query_lower:
+                st.info(f"Using general knowledge for pattern: {pattern}")
                 return False
                 
         # Special handling for "who" questions about people - these often need search
         if query_lower.startswith("who "):
+            st.info("Web search activated for 'who' question")
             return True
             
         # Special handling for questions about events and competitions
         if any(term in query_lower for term in ["mr.", "mr ", "miss", "ms.", "ms ", "competition", "contest"]):
+            st.info("Web search activated for event/competition related query")
             return True
         
         # Check for specific date/time references that would need current info
         date_patterns = ["2023", "2024", "this year", "this month", "this week", "today"]
         for date in date_patterns:
             if date in query_lower:
+                st.info(f"Web search activated for time-sensitive query: {date}")
                 return True
         
         # Default to not using search for simple queries
@@ -163,13 +184,16 @@ class SearchChain:
         
         # If it's a very short query (1-3 words), it's likely a simple command or greeting
         if word_count <= 3:
+            st.info("Using general knowledge for short query")
             return False
         
         # If it's a very long query (>15 words), it's likely a complex question that might need search
         if word_count > 15:
+            st.info("Web search activated for complex query")
             return True
         
         # For medium-length queries, be conservative and don't use search by default
+        st.info("Using general knowledge for medium-length query")
         return False
     
     def format_search_results(self, results: Dict[str, Any]) -> str:
@@ -248,49 +272,59 @@ class SearchChain:
     def _perform_regular_search(self, question: str, chat_history: List[Dict[str, str]], language: str) -> Dict[str, Any]:
         """Helper method to perform a regular search"""
         st.info("Performing web search")
-        # Perform the search
-        search_results = self.web_search_tool.search(question)
-        
-        # Format the search results
-        formatted_results = self.format_search_results(search_results)
-        
-        # Format chat history for context
-        formatted_history = ""
-        for msg in chat_history[-5:]:  # Use last 5 messages for context
-            role = "User" if msg["role"] == "user" else "Assistant"
-            formatted_history += f"{role}: {msg['message']}\n"
-        
-        # Generate the answer
         try:
-            response = self.search_chain.invoke({
-                "question": question,
-                "search_results": formatted_results,
-                "chat_history": formatted_history,
-                "language": language,
-                "personality": self.personality
-            })
+            # Perform the search
+            search_results = self.web_search_tool.search(question)
             
+            # Format the search results
+            formatted_results = self.format_search_results(search_results)
+            
+            # Format chat history for context
+            formatted_history = ""
+            for msg in chat_history[-5:]:  # Use last 5 messages for context
+                role = "User" if msg["role"] == "user" else "Assistant"
+                formatted_history += f"{role}: {msg['message']}\n"
+            
+            # Generate the answer using the user's OpenAI API key
+            try:
+                response = self.search_chain.invoke({
+                    "question": question,
+                    "search_results": formatted_results,
+                    "chat_history": formatted_history,
+                    "language": language,
+                    "personality": self.personality
+                })
+                
+                return {
+                    "answer": response["text"],
+                    "search_results": search_results,
+                    "is_url_processing": False
+                }
+            except Exception as e:
+                error_message = str(e)
+                if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                    st.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
+                    return {
+                        "answer": "I found some information through web search, but I couldn't process it due to API usage limits with your OpenAI API key. I can still show you the search results I found.",
+                        "search_results": search_results,
+                        "is_url_processing": False,
+                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results
+                    }
+                else:
+                    st.error(f"Error generating search response: {error_message}")
+                    return {
+                        "answer": f"I found some information through web search, but encountered an error while processing it: {error_message}. Here are the raw search results I found.",
+                        "search_results": search_results,
+                        "is_url_processing": False,
+                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results
+                    }
+        except Exception as e:
+            st.error(f"Error performing web search: {str(e)}")
             return {
-                "answer": response["text"],
-                "search_results": search_results,
+                "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
+                "search_results": None,
                 "is_url_processing": False
             }
-        except Exception as e:
-            error_message = str(e)
-            if "quota" in error_message.lower() or "rate limit" in error_message.lower():
-                st.error(f"API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
-                return {
-                    "answer": "I'm sorry, but I couldn't complete the web search due to API usage limits. Please try again later or try a different question that doesn't require web search.",
-                    "search_results": None,
-                    "is_url_processing": False
-                }
-            else:
-                st.error(f"Error generating search response: {error_message}")
-                return {
-                    "answer": f"I encountered an error while searching the web: {error_message}. Let me try to answer based on what I know.",
-                    "search_results": None,
-                    "is_url_processing": False
-                }
 
     def is_url(self, text: str) -> bool:
         """
@@ -447,78 +481,111 @@ class SearchChain:
         """
         try:
             # First, generate a better search query based on the conversation context
-            context_prompt_template = PromptTemplate(
-                input_variables=["query", "chat_history", "current_year"],
-                template="""
-                You are an AI assistant that helps formulate better search queries based on conversation context.
+            try:
+                context_prompt_template = PromptTemplate(
+                    input_variables=["query", "chat_history", "current_year"],
+                    template="""
+                    You are an AI assistant that helps formulate better search queries based on conversation context.
+                    
+                    Current user query: {query}
+                    
+                    Previous conversation:
+                    ---------------------
+                    {chat_history}
+                    ---------------------
+                    
+                    Current year: {current_year}
+                    
+                    Based on the current query and the conversation history, create an improved search query that:
+                    1. Captures the full context of what the user is asking about
+                    2. EXPLICITLY includes the current year or "latest" or "current" when the query is about recent events, people, competitions, or other time-sensitive information
+                    3. Avoids using time context from previous messages unless the user is SPECIFICALLY asking about historical information
+                    4. Is optimized for web search engines
+                    
+                    Return ONLY the improved search query without any explanation or additional text.
+                    """
+                )
                 
-                Current user query: {query}
+                # Create a chain for generating contextual search queries
+                context_chain = LLMChain(
+                    llm=self.llm,
+                    prompt=context_prompt_template
+                )
                 
-                Previous conversation:
-                ---------------------
-                {chat_history}
-                ---------------------
+                # Format chat history for context
+                formatted_history = ""
+                for msg in chat_history[-5:]:  # Use last 5 messages for context
+                    role = "User" if msg["role"] == "user" else "Assistant"
+                    formatted_history += f"{role}: {msg['message']}\n"
                 
-                Current year: {current_year}
+                # Get current year for time context
+                from datetime import datetime
+                current_year = datetime.now().year
                 
-                Based on the current query and the conversation history, create an improved search query that:
-                1. Captures the full context of what the user is asking about
-                2. EXPLICITLY includes the current year or "latest" or "current" when the query is about recent events, people, competitions, or other time-sensitive information
-                3. Avoids using time context from previous messages unless the user is SPECIFICALLY asking about historical information
-                4. Is optimized for web search engines
+                # Generate the improved search query
+                improved_query_response = context_chain.invoke({
+                    "query": query,
+                    "chat_history": formatted_history,
+                    "current_year": current_year
+                })
                 
-                Return ONLY the improved search query without any explanation or additional text.
-                """
-            )
-            
-            # Create a chain for generating contextual search queries
-            context_chain = LLMChain(
-                llm=self.llm,
-                prompt=context_prompt_template
-            )
-            
-            # Format chat history for context
-            formatted_history = ""
-            for msg in chat_history[-5:]:  # Use last 5 messages for context
-                role = "User" if msg["role"] == "user" else "Assistant"
-                formatted_history += f"{role}: {msg['message']}\n"
-            
-            # Get current year for time context
-            from datetime import datetime
-            current_year = datetime.now().year
-            
-            # Generate the improved search query
-            improved_query_response = context_chain.invoke({
-                "query": query,
-                "chat_history": formatted_history,
-                "current_year": current_year
-            })
-            
-            # Extract the improved query
-            improved_query = improved_query_response["text"].strip()
-            
-            # Log the original and improved queries for debugging
-            st.info(f"Original query: {query}")
-            st.info(f"Improved query: {improved_query}")
+                # Extract the improved query
+                improved_query = improved_query_response["text"].strip()
+                
+                # Log the original and improved queries for debugging
+                st.info(f"Original query: {query}")
+                st.info(f"Improved query: {improved_query}")
+            except Exception as e:
+                st.warning(f"Error improving search query: {str(e)}. Using original query.")
+                improved_query = query
             
             # Perform the web search with the improved query
-            search_results = self.web_search_tool.search(improved_query)
+            try:
+                search_results = self.web_search_tool.search(improved_query)
+            except Exception as e:
+                st.error(f"Error performing web search: {str(e)}")
+                return {
+                    "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
+                    "search_results": None,
+                    "is_web_search": False
+                }
             
             # Generate the response
-            response = self.search_chain.invoke({
-                "question": query,  # Use the original question for response generation
-                "search_results": self.format_search_results(search_results),
-                "chat_history": formatted_history,
-                "language": language,
-                "personality": self.personality
-            })
-            
-            return {
-                "answer": response["text"],
-                "search_results": search_results,
-                "is_web_search": True,
-                "improved_query": improved_query  # Include the improved query in the response
-            }
+            try:
+                response = self.search_chain.invoke({
+                    "question": query,  # Use the original question for response generation
+                    "search_results": self.format_search_results(search_results),
+                    "chat_history": formatted_history,
+                    "language": language,
+                    "personality": self.personality
+                })
+                
+                return {
+                    "answer": response["text"],
+                    "search_results": search_results,
+                    "is_web_search": True,
+                    "improved_query": improved_query  # Include the improved query in the response
+                }
+            except Exception as e:
+                error_message = str(e)
+                if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                    st.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
+                    return {
+                        "answer": "I found some information through web search, but I couldn't process it due to API usage limits with your OpenAI API key. I can still show you the search results I found.",
+                        "search_results": search_results,
+                        "is_web_search": True,
+                        "improved_query": improved_query,
+                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results)
+                    }
+                else:
+                    st.error(f"Error generating search response: {error_message}")
+                    return {
+                        "answer": f"I found some information through web search, but encountered an error while processing it: {error_message}. Here are the raw search results I found.",
+                        "search_results": search_results,
+                        "is_web_search": True,
+                        "improved_query": improved_query,
+                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results)
+                    }
         except Exception as e:
             st.error(f"Error in web search: {str(e)}")
             return {
