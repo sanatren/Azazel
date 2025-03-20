@@ -22,9 +22,16 @@ def debug_basic_response(message):
         # Try a direct call to OpenAI
         from openai import OpenAI
         
-        # Get API key from environment
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Get API key from session state first, then fall back to environment
+        api_key = st.session_state.get("openai_api_key")
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY")
+            st.warning("Using environment API key as fallback. This may cause quota issues.")
         
+        if not api_key:
+            st.error("No API key found in session or environment")
+            return "Error: No API key available"
+            
         # Initialize client
         client = OpenAI(api_key=api_key)
         

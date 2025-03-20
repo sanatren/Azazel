@@ -72,5 +72,9 @@ class VisionProcessor:
                 "images": self.image_store[session_id]
             }]
         except Exception as e:
-            st.error(f"Vision API error: {str(e)}")
+            error_message = str(e)
+            if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                st.error(f"Vision API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
+            else:
+                st.error(f"Vision API error: {error_message}")
             return []

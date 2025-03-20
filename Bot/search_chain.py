@@ -261,19 +261,36 @@ class SearchChain:
             formatted_history += f"{role}: {msg['message']}\n"
         
         # Generate the answer
-        response = self.search_chain.invoke({
-            "question": question,
-            "search_results": formatted_results,
-            "chat_history": formatted_history,
-            "language": language,
-            "personality": self.personality
-        })
-        
-        return {
-            "answer": response["text"],
-            "search_results": search_results,
-            "is_url_processing": False
-        }
+        try:
+            response = self.search_chain.invoke({
+                "question": question,
+                "search_results": formatted_results,
+                "chat_history": formatted_history,
+                "language": language,
+                "personality": self.personality
+            })
+            
+            return {
+                "answer": response["text"],
+                "search_results": search_results,
+                "is_url_processing": False
+            }
+        except Exception as e:
+            error_message = str(e)
+            if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                st.error(f"API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
+                return {
+                    "answer": "I'm sorry, but I couldn't complete the web search due to API usage limits. Please try again later or try a different question that doesn't require web search.",
+                    "search_results": None,
+                    "is_url_processing": False
+                }
+            else:
+                st.error(f"Error generating search response: {error_message}")
+                return {
+                    "answer": f"I encountered an error while searching the web: {error_message}. Let me try to answer based on what I know.",
+                    "search_results": None,
+                    "is_url_processing": False
+                }
 
     def is_url(self, text: str) -> bool:
         """

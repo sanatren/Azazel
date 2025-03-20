@@ -16,7 +16,7 @@ from vision_processor import VisionProcessor
 class DocumentProcessor:
     """Process various document types for RAG applications"""
     
-    def __init__(self):
+    def __init__(self, api_key=None):
         """Initialize the document processor"""
         # Initialize the text splitter for chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -33,8 +33,11 @@ class DocumentProcessor:
         # Dictionary to store vectorstores by session ID
         self.vectorstores = {}
         
-        # Initialize vision processor
-        self.vision_processor = VisionProcessor(os.getenv("OPENAI_API_KEY"))
+        # Initialize vision processor with provided API key or fallback to env
+        if api_key:
+            self.vision_processor = VisionProcessor(api_key)
+        else:
+            self.vision_processor = VisionProcessor(os.getenv("OPENAI_API_KEY"))
     
     def process_file(self, uploaded_file, session_id: str) -> bool:
         """

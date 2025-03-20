@@ -11,7 +11,7 @@ class RAGChain:
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.document_processor = DocumentProcessor()
+        self.document_processor = DocumentProcessor(api_key=api_key)
         self.llm = ChatOpenAI(model="gpt-4", openai_api_key=api_key, temperature=0.5)
         self.personality = "You are a helpful assistant."
         
@@ -96,28 +96,45 @@ class RAGChain:
 
     def answer_question(self, question: str, session_id: str, chat_history: List[Dict[str, str]], language: str = "English") -> Dict[str, Any]:
         """Generate answer with combined context"""
-        image_analysis = self.document_processor.vision_processor.analyze_images(session_id, question)
-        text_docs = self.document_processor.query_documents(question, session_id)
-        context = self._combine_contexts(text_docs, image_analysis)
-        
-        formatted_history = "\n".join(
-            f"{msg['role']}: {msg['message']}" 
-            for msg in chat_history[-7:]
-        )
+        try:
+            image_analysis = self.document_processor.vision_processor.analyze_images(session_id, question)
+            text_docs = self.document_processor.query_documents(question, session_id)
+            context = self._combine_contexts(text_docs, image_analysis)
+            
+            formatted_history = "\n".join(
+                f"{msg['role']}: {msg['message']}" 
+                for msg in chat_history[-7:]
+            )
 
-        result = self.chain.invoke({
-            "question": question,
-            "context": context,
-            "chat_history": formatted_history,
-            "language": language,
-            "personality": self.personality
-        })
-        
-        return {
-            "answer": result["text"],
-            "sources": text_docs,
-            "image_analysis": image_analysis
-        }
+            result = self.chain.invoke({
+                "question": question,
+                "context": context,
+                "chat_history": formatted_history,
+                "language": language,
+                "personality": self.personality
+            })
+            
+            return {
+                "answer": result["text"],
+                "sources": text_docs,
+                "image_analysis": image_analysis
+            }
+        except Exception as e:
+            error_message = str(e)
+            if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+                st.error(f"API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
+                return {
+                    "answer": "I'm sorry, but I couldn't analyze the documents or images due to API usage limits. Please try again later or try a different question that doesn't require document or image analysis.",
+                    "sources": [],
+                    "image_analysis": []
+                }
+            else:
+                st.error(f"Error in RAG processing: {error_message}")
+                return {
+                    "answer": f"I encountered an error while processing your documents: {error_message}. Let me try to answer based on what I know.",
+                    "sources": [],
+                    "image_analysis": []
+                }
         
     def _combine_contexts(self, text_docs: List, image_analysis: List) -> str:
         """Combine text and image contexts"""
