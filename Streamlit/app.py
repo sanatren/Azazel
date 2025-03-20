@@ -62,8 +62,14 @@ def direct_openai_response(question, session_id):
         return "Please provide an OpenAI API key to continue."
         
     try:
+        # Get the current language
+        current_language = st.session_state.get("current_language", "English")
+        
         # Initialize the model
         current_personality = st.session_state.get(f"personality_{session_id}", "You are a helpful assistant.")
+        # Add mandatory language requirement to personality
+        current_personality += f"\n\nMANDATORY REQUIREMENT: You MUST respond in {current_language} ONLY. ALL text in your response MUST be in {current_language}."
+        
         client = OpenAI(api_key=st.session_state.openai_api_key)
         
         # Initialize sentiment analyzer if not already initialized
@@ -1595,13 +1601,12 @@ else:
                         
                         search_determination = search_chain.determine_search_need_with_llm(
                             st.session_state.pending_user_message, 
-                            chat_history
+                            chat_history,
+                            st.session_state.current_language
                         )
                         needs_search = search_determination["search_needed"]
                         if needs_search:
-                            st.info(f"LLM determined web search is needed: {search_determination['reasoning']}")
-                        else:
-                            st.info(f"LLM determined web search is not needed: {search_determination['reasoning']}")
+                            st.info(f"Web search needed: {search_determination['reasoning']}")
                 except Exception as e:
                     st.error(f"Error in LLM search determination: {str(e)}")
                     # Fall back to heuristic method
@@ -1694,12 +1699,14 @@ else:
                         
                         # If the LLM decides no search is needed after all, fall back to direct response
                         if search_response.get("no_search_needed", False):
-                            
+                            st.info(f"Search not needed: {search_response['reasoning']}")
                             response = direct_openai_response(
                                 st.session_state.pending_user_message,
                                 st.session_state.current_session
                             )
                         else:
+                            if search_response.get("reformulated_query"):
+                                st.info(f"Searching web with query: {search_response['reformulated_query']}")
                             response = search_response["answer"]
                             
                             # If there was an API quota error but we have raw search results

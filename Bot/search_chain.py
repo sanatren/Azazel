@@ -159,30 +159,30 @@ class SearchChain:
         # Check for search keywords
         for keyword in search_keywords:
             if keyword in query_lower:
-                st.info(f"Web search activated due to keyword: {keyword}")
+               
                 return True
         
         # Check if it's a general knowledge question
         for pattern in general_knowledge_patterns:
             if pattern in query_lower:
-                st.info(f"Using general knowledge for pattern: {pattern}")
+                
                 return False
                 
         # Special handling for "who" questions about people - these often need search
         if query_lower.startswith("who "):
-            st.info("Web search activated for 'who' question")
+            
             return True
             
         # Special handling for questions about events and competitions
         if any(term in query_lower for term in ["mr.", "mr ", "miss", "ms.", "ms ", "competition", "contest"]):
-            st.info("Web search activated for event/competition related query")
+           
             return True
         
         # Check for specific date/time references that would need current info
         date_patterns = ["2023", "2024", "this year", "this month", "this week", "today"]
         for date in date_patterns:
             if date in query_lower:
-                st.info(f"Web search activated for time-sensitive query: {date}")
+                
                 return True
         
         # Default to not using search for simple queries
@@ -191,16 +191,16 @@ class SearchChain:
         
         # If it's a very short query (1-3 words), it's likely a simple command or greeting
         if word_count <= 3:
-            st.info("Using general knowledge for short query")
+            
             return False
         
         # If it's a very long query (>15 words), it's likely a complex question that might need search
         if word_count > 15:
-            st.info("Web search activated for complex query")
+           
             return True
         
         # For medium-length queries, be conservative and don't use search by default
-        st.info("Using general knowledge for medium-length query")
+        
         return False
     
     def format_search_results(self, results: Dict[str, Any]) -> str:
@@ -498,11 +498,11 @@ class SearchChain:
         """
         try:
             # Use the LLM to determine if search is needed and get an optimized query
-            search_determination = self.determine_search_need_with_llm(query, chat_history)
+            search_determination = self.determine_search_need_with_llm(query, chat_history, language)
             
             # If search is not needed, return a response indicating that
             if not search_determination["search_needed"]:
-                st.info(f"LLM determined that web search is not needed for this query.")
+                
                 return {
                     "answer": None,  # Signal to use the main model without search
                     "search_results": None,
@@ -514,7 +514,7 @@ class SearchChain:
             
             # Use the reformulated query from the LLM
             improved_query = search_determination["reformulated_query"]
-            st.info(f"Using LLM-optimized search query: {improved_query}")
+            
             
             # Format chat history for context
             formatted_history = ""
@@ -587,13 +587,15 @@ class SearchChain:
                 "language": language  # Pass along the language preference
             }
 
-    def determine_search_need_with_llm(self, query: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
+    def determine_search_need_with_llm(self, query: str, chat_history: List[Dict[str, str]], language: str = "English", personality: str = None) -> Dict[str, Any]:
         """
         Use an LLM to determine if a web search is needed for the query
         
         Args:
             query: The user's query
             chat_history: Recent chat history
+            language: Language to respond in
+            personality: Optional personality to use (not used in current implementation)
             
         Returns:
             Dict containing decision and reformulated query if needed
@@ -608,11 +610,12 @@ class SearchChain:
         
         # Create the prompt for determining search need
         prompt_template = PromptTemplate(
-            input_variables=["query", "chat_history", "current_date"],
+            input_variables=["query", "chat_history", "current_date", "language"],
             template="""
             You are a specialized AI designed to determine whether a web search would be helpful to answer a user's query.
             
             Current date: {current_date}
+            Language to use: {language}
             
             User's query: {query}
             
@@ -642,6 +645,8 @@ class SearchChain:
               "reformulated_query": "Optimized search query if search is needed"
             }}
             
+            IMPORTANT: Ensure that any reformulated query is appropriate for searching for content in {language}.
+            
             Only respond with the JSON. No other text.
             """
         )
@@ -658,11 +663,12 @@ class SearchChain:
         
         try:
             # Get the decision from the model
-            st.info("Determining search needs with LLM...")
+            
             response = search_determination_chain.invoke({
                 "query": query,
                 "chat_history": formatted_history,
-                "current_date": current_date
+                "current_date": current_date,
+                "language": language
             })
             
             # Parse the response
@@ -670,23 +676,20 @@ class SearchChain:
             try:
                 result = json.loads(response["text"])
                 
-                # Log the result
-                st.info(f"Search determination: {result['search_needed']}")
-                st.info(f"Reason: {result['reasoning']}")
-                
                 if result["search_needed"] in ["DEFINITE_SEARCH", "LIKELY_SEARCH"]:
                     reformulated_query = result.get("reformulated_query", query)
-                    st.info(f"Reformulated query: {reformulated_query}")
                     return {
                         "search_needed": True,
                         "reformulated_query": reformulated_query,
-                        "reasoning": result["reasoning"]
+                        "reasoning": result["reasoning"],
+                        "language": language  # Add language to return value
                     }
                 else:
                     return {
                         "search_needed": False,
                         "reformulated_query": query,
-                        "reasoning": result["reasoning"]
+                        "reasoning": result["reasoning"],
+                        "language": language  # Add language to return value
                     }
             except json.JSONDecodeError:
                 st.warning(f"Failed to parse LLM response as JSON. Using heuristic determination instead.")
@@ -695,7 +698,8 @@ class SearchChain:
                 return {
                     "search_needed": search_needed,
                     "reformulated_query": query,
-                    "reasoning": "Fallback to heuristic determination due to parsing error."
+                    "reasoning": "Fallback to heuristic determination due to parsing error.",
+                    "language": language  # Add language to return value
                 }
         except Exception as e:
             st.warning(f"Error determining search need with LLM: {str(e)}. Falling back to heuristic method.")
@@ -704,5 +708,6 @@ class SearchChain:
             return {
                 "search_needed": search_needed,
                 "reformulated_query": query,
-                "reasoning": f"Fallback to heuristic determination due to error: {str(e)}"
+                "reasoning": f"Fallback to heuristic determination due to error: {str(e)}",
+                "language": language  # Add language to return value
             }
