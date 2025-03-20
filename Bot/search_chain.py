@@ -23,7 +23,7 @@ class SearchChain:
         Initialize the search chain
         
         Args:
-            api_key: OpenAI API key (from the user)
+            api_key: OpenAI API key (from the user) - used for ALL operations including content generation and search determination
             google_api_key: Google API key (from the site owner)
             google_cse_id: Google Custom Search Engine ID (from the site owner)
         """
@@ -36,6 +36,13 @@ class SearchChain:
             model="gpt-4",
             openai_api_key=api_key,
             temperature=0.3
+        )
+        
+        # Initialize the internal LLM with the user's API key for search decisions
+        self.internal_llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=api_key,  # Use user's API key instead of environment API key
+            temperature=0.2
         )
         
         # Create the prompt template for search-augmented responses
@@ -285,6 +292,9 @@ class SearchChain:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 formatted_history += f"{role}: {msg['message']}\n"
             
+            # Strongly emphasize language requirement in the system prompt
+            strong_language_personality = self.personality + f"\n\nMANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}."
+            
             # Generate the answer using the user's OpenAI API key
             try:
                 response = self.search_chain.invoke({
@@ -292,13 +302,14 @@ class SearchChain:
                     "search_results": formatted_results,
                     "chat_history": formatted_history,
                     "language": language,
-                    "personality": self.personality
+                    "personality": strong_language_personality
                 })
                 
                 return {
                     "answer": response["text"],
                     "search_results": search_results,
-                    "is_url_processing": False
+                    "is_url_processing": False,
+                    "language": language  # Pass along the language preference
                 }
             except Exception as e:
                 error_message = str(e)
@@ -308,7 +319,8 @@ class SearchChain:
                         "answer": "I found some information through web search, but I couldn't process it due to API usage limits with your OpenAI API key. I can still show you the search results I found.",
                         "search_results": search_results,
                         "is_url_processing": False,
-                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results
+                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results,
+                        "language": language  # Pass along the language preference
                     }
                 else:
                     st.error(f"Error generating search response: {error_message}")
@@ -316,14 +328,16 @@ class SearchChain:
                         "answer": f"I found some information through web search, but encountered an error while processing it: {error_message}. Here are the raw search results I found.",
                         "search_results": search_results,
                         "is_url_processing": False,
-                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results
+                        "raw_search_results": formatted_results[:1000] + "..." if len(formatted_results) > 1000 else formatted_results,
+                        "language": language  # Pass along the language preference
                     }
         except Exception as e:
             st.error(f"Error performing web search: {str(e)}")
             return {
                 "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
                 "search_results": None,
-                "is_url_processing": False
+                "is_url_processing": False,
+                "language": language  # Pass along the language preference
             }
 
     def is_url(self, text: str) -> bool:
@@ -390,10 +404,11 @@ class SearchChain:
                     "answer": f"I couldn't extract content from the URL: {url}. The website might be blocking automated access or the URL might be invalid.",
                     "url": url,
                     "content": "",
-                    "is_url_processing": True
+                    "is_url_processing": True,
+                    "language": language  # Pass along the language preference
                 }
             
-            # Create a prompt template for URL processing
+            # Create a prompt template for URL processing with strong language enforcement
             url_prompt_template = PromptTemplate(
                 input_variables=["url", "content", "question", "chat_history", "language", "personality"],
                 template="""
@@ -426,7 +441,7 @@ class SearchChain:
                 CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning.
                 The personality should affect HOW you respond, not WHAT information you provide.
                 
-                Remember to respond in {language}.
+                MANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}.
                 """
             )
             
@@ -456,7 +471,8 @@ class SearchChain:
                 "answer": response["text"],
                 "url": url,
                 "content": content[:500] + "..." if len(content) > 500 else content,  # Truncate for display
-                "is_url_processing": True  # Add this flag to indicate it's URL processing
+                "is_url_processing": True,  # Add this flag to indicate it's URL processing
+                "language": language  # Pass along the language preference
             }
         except Exception as e:
             st.error(f"Error processing URL: {str(e)}")
@@ -464,7 +480,8 @@ class SearchChain:
                 "answer": f"I encountered an error while processing the URL: {str(e)}. Let me try to answer based on what I know.",
                 "url": url,
                 "content": "",
-                "is_url_processing": True
+                "is_url_processing": True,
+                "language": language  # Pass along the language preference
             }
 
     def search_with_web(self, query: str, chat_history: List[Dict[str, Any]], language: str = "English") -> Dict[str, Any]:
@@ -480,64 +497,30 @@ class SearchChain:
             Dict[str, Any]: A dictionary containing the answer and search results
         """
         try:
-            # First, generate a better search query based on the conversation context
-            try:
-                context_prompt_template = PromptTemplate(
-                    input_variables=["query", "chat_history", "current_year"],
-                    template="""
-                    You are an AI assistant that helps formulate better search queries based on conversation context.
-                    
-                    Current user query: {query}
-                    
-                    Previous conversation:
-                    ---------------------
-                    {chat_history}
-                    ---------------------
-                    
-                    Current year: {current_year}
-                    
-                    Based on the current query and the conversation history, create an improved search query that:
-                    1. Captures the full context of what the user is asking about
-                    2. EXPLICITLY includes the current year or "latest" or "current" when the query is about recent events, people, competitions, or other time-sensitive information
-                    3. Avoids using time context from previous messages unless the user is SPECIFICALLY asking about historical information
-                    4. Is optimized for web search engines
-                    
-                    Return ONLY the improved search query without any explanation or additional text.
-                    """
-                )
-                
-                # Create a chain for generating contextual search queries
-                context_chain = LLMChain(
-                    llm=self.llm,
-                    prompt=context_prompt_template
-                )
-                
-                # Format chat history for context
-                formatted_history = ""
-                for msg in chat_history[-5:]:  # Use last 5 messages for context
-                    role = "User" if msg["role"] == "user" else "Assistant"
-                    formatted_history += f"{role}: {msg['message']}\n"
-                
-                # Get current year for time context
-                from datetime import datetime
-                current_year = datetime.now().year
-                
-                # Generate the improved search query
-                improved_query_response = context_chain.invoke({
-                    "query": query,
-                    "chat_history": formatted_history,
-                    "current_year": current_year
-                })
-                
-                # Extract the improved query
-                improved_query = improved_query_response["text"].strip()
-                
-                # Log the original and improved queries for debugging
-                st.info(f"Original query: {query}")
-                st.info(f"Improved query: {improved_query}")
-            except Exception as e:
-                st.warning(f"Error improving search query: {str(e)}. Using original query.")
-                improved_query = query
+            # Use the LLM to determine if search is needed and get an optimized query
+            search_determination = self.determine_search_need_with_llm(query, chat_history)
+            
+            # If search is not needed, return a response indicating that
+            if not search_determination["search_needed"]:
+                st.info(f"LLM determined that web search is not needed for this query.")
+                return {
+                    "answer": None,  # Signal to use the main model without search
+                    "search_results": None,
+                    "is_web_search": False,
+                    "no_search_needed": True,
+                    "reasoning": search_determination["reasoning"],
+                    "language": language  # Pass along the language preference
+                }
+            
+            # Use the reformulated query from the LLM
+            improved_query = search_determination["reformulated_query"]
+            st.info(f"Using LLM-optimized search query: {improved_query}")
+            
+            # Format chat history for context
+            formatted_history = ""
+            for msg in chat_history[-5:]:  # Use last 5 messages for context
+                role = "User" if msg["role"] == "user" else "Assistant"
+                formatted_history += f"{role}: {msg['message']}\n"
             
             # Perform the web search with the improved query
             try:
@@ -545,10 +528,15 @@ class SearchChain:
             except Exception as e:
                 st.error(f"Error performing web search: {str(e)}")
                 return {
-                    "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
+                    "answer": f"I determined that web search would be helpful for this query, but encountered an error: {str(e)}. Let me try to answer based on what I know.",
                     "search_results": None,
-                    "is_web_search": False
+                    "is_web_search": False,
+                    "error": str(e),
+                    "language": language  # Pass along the language preference
                 }
+            
+            # Strongly emphasize language requirement in the system prompt
+            strong_language_personality = self.personality + f"\n\nMANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}."
             
             # Generate the response
             try:
@@ -557,14 +545,16 @@ class SearchChain:
                     "search_results": self.format_search_results(search_results),
                     "chat_history": formatted_history,
                     "language": language,
-                    "personality": self.personality
+                    "personality": strong_language_personality
                 })
                 
                 return {
                     "answer": response["text"],
                     "search_results": search_results,
                     "is_web_search": True,
-                    "improved_query": improved_query  # Include the improved query in the response
+                    "improved_query": improved_query,  # Include the improved query in the response
+                    "reasoning": search_determination["reasoning"],
+                    "language": language  # Pass along the language preference
                 }
             except Exception as e:
                 error_message = str(e)
@@ -575,7 +565,8 @@ class SearchChain:
                         "search_results": search_results,
                         "is_web_search": True,
                         "improved_query": improved_query,
-                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results)
+                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results),
+                        "language": language  # Pass along the language preference
                     }
                 else:
                     st.error(f"Error generating search response: {error_message}")
@@ -584,12 +575,134 @@ class SearchChain:
                         "search_results": search_results,
                         "is_web_search": True,
                         "improved_query": improved_query,
-                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results)
+                        "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results),
+                        "language": language  # Pass along the language preference
                     }
         except Exception as e:
-            st.error(f"Error in web search: {str(e)}")
+            st.error(f"Error in web search determination: {str(e)}")
             return {
-                "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
+                "answer": f"I encountered an error while determining whether web search is needed: {str(e)}. Let me try to answer based on what I know.",
                 "search_results": None,
-                "is_web_search": False
+                "is_web_search": False,
+                "language": language  # Pass along the language preference
+            }
+
+    def determine_search_need_with_llm(self, query: str, chat_history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """
+        Use an LLM to determine if a web search is needed for the query
+        
+        Args:
+            query: The user's query
+            chat_history: Recent chat history
+            
+        Returns:
+            Dict containing decision and reformulated query if needed
+        """
+        # Using the user's API key for search determination logic
+        
+        # Format the chat history for context
+        formatted_history = ""
+        for msg in chat_history[-5:]:  # Use last 5 messages for context
+            role = "User" if msg["role"] == "user" else "Assistant"
+            formatted_history += f"{role}: {msg['message']}\n"
+        
+        # Create the prompt for determining search need
+        prompt_template = PromptTemplate(
+            input_variables=["query", "chat_history", "current_date"],
+            template="""
+            You are a specialized AI designed to determine whether a web search would be helpful to answer a user's query.
+            
+            Current date: {current_date}
+            
+            User's query: {query}
+            
+            Recent conversation:
+            ---------------------
+            {chat_history}
+            ---------------------
+            
+            Please analyze this query and determine:
+            1. If it's likely to need up-to-date information (news, current events, recent developments)
+            2. If it's asking about specific facts that an AI model might not have training data on
+            3. If it's asking about something time-sensitive or location-specific
+            4. If it's about popular culture, sports, or current trends
+            5. If it's about prices, availability, or other volatile information
+            
+            First, classify the query into one of these categories:
+            - DEFINITE_SEARCH: Query definitely requires web search (current events, specific facts not in training data)
+            - LIKELY_SEARCH: Query would probably benefit from web search
+            - NO_SEARCH: Query can be answered without web search (general knowledge, opinions, creative tasks)
+            
+            Then, if search is needed, provide a reformulated search query optimized for web search engines.
+            
+            Return your response in this JSON format:
+            {{
+              "search_needed": "DEFINITE_SEARCH|LIKELY_SEARCH|NO_SEARCH",
+              "reasoning": "Brief explanation of your decision",
+              "reformulated_query": "Optimized search query if search is needed"
+            }}
+            
+            Only respond with the JSON. No other text.
+            """
+        )
+        
+        # Create the chain for determining search need
+        search_determination_chain = LLMChain(
+            llm=self.internal_llm,
+            prompt=prompt_template
+        )
+        
+        # Get the current date
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            # Get the decision from the model
+            st.info("Determining search needs with LLM...")
+            response = search_determination_chain.invoke({
+                "query": query,
+                "chat_history": formatted_history,
+                "current_date": current_date
+            })
+            
+            # Parse the response
+            import json
+            try:
+                result = json.loads(response["text"])
+                
+                # Log the result
+                st.info(f"Search determination: {result['search_needed']}")
+                st.info(f"Reason: {result['reasoning']}")
+                
+                if result["search_needed"] in ["DEFINITE_SEARCH", "LIKELY_SEARCH"]:
+                    reformulated_query = result.get("reformulated_query", query)
+                    st.info(f"Reformulated query: {reformulated_query}")
+                    return {
+                        "search_needed": True,
+                        "reformulated_query": reformulated_query,
+                        "reasoning": result["reasoning"]
+                    }
+                else:
+                    return {
+                        "search_needed": False,
+                        "reformulated_query": query,
+                        "reasoning": result["reasoning"]
+                    }
+            except json.JSONDecodeError:
+                st.warning(f"Failed to parse LLM response as JSON. Using heuristic determination instead.")
+                # Fall back to the original needs_search method
+                search_needed = self.needs_search(query)
+                return {
+                    "search_needed": search_needed,
+                    "reformulated_query": query,
+                    "reasoning": "Fallback to heuristic determination due to parsing error."
+                }
+        except Exception as e:
+            st.warning(f"Error determining search need with LLM: {str(e)}. Falling back to heuristic method.")
+            # Fall back to the original needs_search method
+            search_needed = self.needs_search(query)
+            return {
+                "search_needed": search_needed,
+                "reformulated_query": query,
+                "reasoning": f"Fallback to heuristic determination due to error: {str(e)}"
             }

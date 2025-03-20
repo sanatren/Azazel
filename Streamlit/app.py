@@ -943,6 +943,7 @@ if api_key_input:
         programming_assistant = ProgrammingAssistant(api_key_input)
         
         # Initialize the search chain if Google API keys are available
+        # User's API key is now used for ALL operations including search determination
         if google_api_key and google_cse_id:
             search_chain = SearchChain(api_key_input, google_api_key, google_cse_id)
             st.sidebar.success("Web search enabled")
@@ -1572,7 +1573,7 @@ else:
         # Check if it needs a web search regardless of whether documents are available
         needs_search = False
         if search_chain:
-            st.info(f"Web search available, checking if query requires search...")
+            
             if is_url:
                 st.info("URL detected in query, activating web search")
                 needs_search = True
@@ -1581,30 +1582,53 @@ else:
                 st.info("Web search forced by user, activating web search")
                 needs_search = True
             else:
-                # Check if the query matches web search criteria
+                # Use the LLM-based determination to decide if web search is needed
                 try:
-                    st.info("Checking if query matches web search criteria...")
-                    needs_search = search_chain.needs_search(st.session_state.pending_user_message)
-                    st.info(f"Web search needed: {needs_search}")
+                    # First check if user has exceeded their API quota
+                    if st.session_state.get("user_api_quota_exceeded", False):
+                        st.warning("API quota exceeded, using heuristic search determination")
+                        needs_search = search_chain.needs_search(st.session_state.pending_user_message)
+                    else:
+                        # Get full chat history
+                        chat_history = get_chat_history_from_supabase(st.session_state.current_session)
+                        # Let the LLM determine if search is needed
+                        
+                        search_determination = search_chain.determine_search_need_with_llm(
+                            st.session_state.pending_user_message, 
+                            chat_history
+                        )
+                        needs_search = search_determination["search_needed"]
+                        if needs_search:
+                            st.info(f"LLM determined web search is needed: {search_determination['reasoning']}")
+                        else:
+                            st.info(f"LLM determined web search is not needed: {search_determination['reasoning']}")
                 except Exception as e:
-                    st.error(f"Error checking web search criteria: {str(e)}")
-                    needs_search = False
+                    st.error(f"Error in LLM search determination: {str(e)}")
+                    # Fall back to heuristic method
+                    st.warning("Falling back to heuristic search determination")
+                    needs_search = search_chain.needs_search(st.session_state.pending_user_message)
             
-            # Important: If both RAG and web search are possible, prioritize web search
-            # for queries that seem more suited for general web information
+            # Important: If both RAG and web search are possible, prioritize the most relevant one
             if should_use_rag and needs_search:
-                # Check if query contains search-specific keywords
-                search_keywords = ["today", "latest", "news", "current", "recent", 
-                                   "2023", "2024", "weather", "covid", "election", 
-                                   "stock", "market", "price", "release", "update"]
-                
-                query_lower = st.session_state.pending_user_message.lower()
-                has_search_keywords = any(kw in query_lower for kw in search_keywords)
-                
-                # If search keywords are present, prioritize web search over documents
-                if has_search_keywords:
+                # Look at the LLM reasoning for search vs RAG relevance
+                # If we have a clear determination that web search is definitely needed,
+                # prioritize it over RAG
+                if 'search_determination' in locals() and 'DEFINITE_SEARCH' in search_determination.get('reasoning', ''):
+                    st.info("Prioritizing web search over documents because search is definitely needed")
                     should_use_rag = False
-                    st.info("Using web search for time-sensitive or external information request.")
+                else:
+                    # Check if query contains time-sensitive keywords that would favor web search
+                    search_keywords = ["today", "latest", "news", "current", "recent", 
+                                        "2025", "2024", "weather", "covid", "election", 
+                                        "stock", "market", "price", "release", "update"]
+                    
+                    query_lower = st.session_state.pending_user_message.lower()
+                    has_search_keywords = any(kw in query_lower for kw in search_keywords)
+                    
+                    # If search keywords are present, prioritize web search over documents
+                    if has_search_keywords:
+                        should_use_rag = False
+                        st.info("Using web search for time-sensitive or external information request.")
 
         # Response generation logic
         try:
@@ -1651,14 +1675,47 @@ else:
                     response = rag_response["answer"]
             elif needs_search:
                 with st.spinner("Searching the web for information..."):
-                    # Pass the current personality to the search chain
-                    search_chain.personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
-                    search_response = search_chain.search_with_web(
-                        st.session_state.pending_user_message,
-                        chat_history,
-                        st.session_state.current_language
-                    )
-                    response = search_response["answer"]
+                    try:
+                        # Get chat history
+                        chat_history = get_chat_history_from_supabase(st.session_state.current_session)
+                        
+                        # Update the search chain with the current personality
+                        search_chain.personality = st.session_state.get(f"personality_{st.session_state.current_session}", "You are a helpful assistant.")
+                        
+                        # Use the web search feature
+                        current_language = st.session_state.get("current_language", "English")
+                        
+                        # Use the enhanced web search with LLM query reformulation
+                        search_response = search_chain.search_with_web(
+                            st.session_state.pending_user_message,
+                            chat_history,
+                            current_language
+                        )
+                        
+                        # If the LLM decides no search is needed after all, fall back to direct response
+                        if search_response.get("no_search_needed", False):
+                            
+                            response = direct_openai_response(
+                                st.session_state.pending_user_message,
+                                st.session_state.current_session
+                            )
+                        else:
+                            response = search_response["answer"]
+                            
+                            # If there was an API quota error but we have raw search results
+                            if "raw_search_results" in search_response:
+                                st.warning("API quota limits reached. Showing raw search results instead.")
+                                st.session_state.user_api_quota_exceeded = True
+                                # Add raw search results expandable section to response
+                                with st.expander("📊 Raw Search Results"):
+                                    st.markdown(search_response["raw_search_results"])
+                    except Exception as e:
+                        st.error(f"Error in web search: {str(e)}")
+                        # Fall back to direct response if search fails
+                        response = direct_openai_response(
+                            st.session_state.pending_user_message,
+                            st.session_state.current_session
+                        )
 
             # If we got a response, display it
             if response:
