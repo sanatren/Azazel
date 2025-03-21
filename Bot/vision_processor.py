@@ -61,7 +61,7 @@ class VisionProcessor:
             }]
 
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=messages,
                 max_tokens=1000
             )
