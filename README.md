@@ -25,7 +25,7 @@ Model switching: Can change model according user needs for more complex or light
 
 Sentiment analysis: for mood-aware responses.
 
-Personality modes according to user
+Personality modes according to user and custum mode to define the assistant behaviour according to user
 
 ## Built With
 
