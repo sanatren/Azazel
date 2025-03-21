@@ -29,7 +29,7 @@ Personality modes according to user and custum mode to define the assistant beha
 
 ## Built With
 
-GPT-3.5 Turbo (supercharged)
+Legacy Models (supercharged)
 
 GPT-4o-mini Vision (for image analysis)
 
