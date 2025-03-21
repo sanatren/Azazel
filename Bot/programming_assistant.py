@@ -16,7 +16,7 @@ class ProgrammingAssistant:
         
         # Initialize the language model
         self.llm = ChatOpenAI(
-            model="gpt-4",
+            model="gpt-4o-mini",
             openai_api_key=api_key,
             temperature=0.2
         )
