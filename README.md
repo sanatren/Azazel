@@ -43,6 +43,8 @@ Streamlit (sleek UI)
 
 [Azazel](https://azazel.streamlit.app/)
 
+Note: if open the project you can run on dark mode for better visuals and chat interface (streamlit default is Light settings)
+
 
 
 
