@@ -21,7 +21,7 @@ Speech Integration: Convert speech to text for hands-free interaction, enhancing
 
 Contextual Memory: Maintains conversation context across sessions, enabling coherent follow-ups and long-term interactions.
 
-Model switching: Can change model according user needs for more complex or lightweight tasks (GPT-4 ↔ GPT-4o ↔ GPT-4o-mini ).
+Model switching: Can change model according user needs for more complex or lightweight tasks (GPT-4 ↔ GPT-4 Turbo ↔ GPT-4o-mini ).
 
 Sentiment analysis: for mood-aware responses.
 
