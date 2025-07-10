@@ -41,7 +41,7 @@ Streamlit (sleek UI)
 
 ### LINK BELOW
 
-[Azazel](https://azazel.streamlit.app/)   {Wake up the app if is on sleeping mode.)
+[Azazel](https://azazel.streamlit.app/)   (Wake up the app if is on sleeping mode.)
 
 Note: if open the project you can run on dark mode for better visuals and chat interface (streamlit default is Light mode settings)
 
