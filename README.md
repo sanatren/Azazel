@@ -2,8 +2,8 @@
 
 Supercharging Legacy Models with multimodal capabilities
 
-Azazel is your AI toolkit of choice that elevates GPT-3.5 Turbo to the next level. By integrating RAG (Retrieval-Augmented Generation), image processing (GPT-4o-mini vision), code execution, and web search, this project turns GPT-3.5 Turbo into a lean, mean, multimodal machine. From analyzing images, debugging code, to conversing with documents, Azazel makes legacy
-models more intelligent, quicker, and more flexible—without the heavyweight price tag. Ideal for devs who need to push the boundaries of what can be achieved with smaller models!
+Azazel is your AI toolkit of choice that elevates GPT-3.5 Turbo and Legacy Models to the next level. By integrating RAG (Retrieval-Augmented Generation), image processing , code execution, and web search, this project turns legacy models into a lean, mean, multimodal machine. From analyzing images, debugging code, to conversing with documents, Azazel makes legacy
+models more intelligent, quicker, and more flexible—without the heavyweight price tag. 
 
 ## Why Azazel?
 
@@ -21,15 +21,15 @@ Speech Integration: Convert speech to text for hands-free interaction, enhancing
 
 Contextual Memory: Maintains conversation context across sessions, enabling coherent follow-ups and long-term interactions.
 
-Model switching: Can change model according user needs for more complex or lightweight tasks (GPT-4 ↔ GPT-4o ↔ GPT-4o-mini ).
+Model switching: Can change model according user needs for more complex or lightweight tasks (GPT-4 ↔ GPT-4 Turbo ↔ GPT-4o-mini ).
 
 Sentiment analysis: for mood-aware responses.
 
-Personality modes according to user
+Personality modes according to user and custum mode to define the assistant behaviour according to user
 
 ## Built With
 
-GPT-3.5 Turbo (supercharged)
+Legacy Models (supercharged)
 
 GPT-4o-mini Vision (for image analysis)
 
@@ -41,7 +41,9 @@ Streamlit (sleek UI)
 
 ### LINK BELOW
 
-[Azazel](https://azazel.streamlit.app/)
+[Azazel](https://azazel.streamlit.app/)   (Wake up the app if is on sleeping mode.)
+
+Note: if open the project you can run on dark mode for better visuals and chat interface (streamlit default is Light mode settings)
 
 
 
