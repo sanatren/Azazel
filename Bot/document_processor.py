@@ -26,9 +26,20 @@ class DocumentProcessor:
         )
         
         # Initialize the embeddings model
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        try:
+            # Try HuggingFace embeddings first
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
+            )
+            print("Using HuggingFace embeddings")
+        except Exception as e:
+            # Fall back to OpenAI embeddings
+            from langchain_openai import OpenAIEmbeddings
+            print(f"Falling back to OpenAI embeddings due to: {e}")
+            self.embeddings = OpenAIEmbeddings(
+                model="text-embedding-ada-002",
+                openai_api_key=api_key
+            )
         
         # Dictionary to store vectorstores by session ID
         self.vectorstores = {}

@@ -16,7 +16,7 @@ class ProgrammingAssistant:
         
         # Initialize the language model
         self.llm = ChatOpenAI(
-            model="gpt-4",
+            model="gpt-4o-mini",
             openai_api_key=api_key,
             temperature=0.2
         )
@@ -33,7 +33,6 @@ class ProgrammingAssistant:
             You are an AI programming assistant specialized in Python. Your task is to help users with programming questions by generating and executing code.
             
             
-            
             Previous conversation:
             ---------------------
             {chat_history}
@@ -43,7 +42,7 @@ class ProgrammingAssistant:
             
             If the user is asking a programming question that requires code execution, follow these steps:
             1. Analyze the problem carefully
-            2. Generate Python code that solves the problem
+            2. Generate Python code (if the programming language is not specified in query) that solves the problem
             3. Explain what the code does
             
             Format your response as follows:
@@ -262,7 +261,7 @@ class ProgrammingAssistant:
         """
         # Format chat history for context
         formatted_history = ""
-        for msg in chat_history[-10:]:  # Increased from 5 to 20 messages for better context
+        for msg in chat_history[-10:]:  # Increased from 5 to 10 messages for better context
             role = "User" if msg["role"] == "user" else "Assistant"
             formatted_history += f"{role}: {msg['message']}\n"
         

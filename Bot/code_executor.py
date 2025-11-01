@@ -24,7 +24,10 @@ class CodeExecutor:
         self.allowed_modules = [
             'math', 'random', 'datetime', 'collections', 'itertools', 
             'functools', 'json', 're', 'string', 'time', 'numpy', 
-            'pandas', 'matplotlib', 'seaborn', 'sklearn'
+            'pandas', 'matplotlib', 'seaborn', 'sklearn',
+            'calendar', 'statistics', 'textwrap', 'unicodedata', 'difflib', 'logging', 'traceback',  
+            'asyncio', 'queue','transformers', 'sentence-transformers', 'langchain', 'llama-index',
+            'tensorflow', 'torch','keras'
         ]
     
     def _is_safe_code(self, code):

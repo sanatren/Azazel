@@ -12,7 +12,7 @@ class RAGChain:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.document_processor = DocumentProcessor(api_key=api_key)
-        self.llm = ChatOpenAI(model="gpt-4", openai_api_key=api_key, temperature=0.5)
+        self.llm = ChatOpenAI(model="gpt-4o-mini", openai_api_key=api_key, temperature=0.5)
         self.personality = "You are a helpful assistant."
         
         self.prompt_template = PromptTemplate(

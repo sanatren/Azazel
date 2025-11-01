@@ -10,6 +10,49 @@ class SentimentAnalyzer:
     
     def __init__(self):
         """Initialize the sentiment analyzer with Hugging Face models"""
+        # Initialize these first, before trying to load models
+        self.sentiment_history = {}
+        self.models_loaded = False
+
+        # Mapping of emotions to response strategies
+        self.emotion_strategies = {
+            "joy": {
+                "tone": "enthusiastic",
+                "style": "conversational",
+                "emoji": True
+            },
+            "sadness": {
+                "tone": "empathetic",
+                "style": "supportive",
+                "emoji": False
+            },
+            "anger": {
+                "tone": "calm",
+                "style": "direct",
+                "emoji": False
+            },
+            "fear": {
+                "tone": "reassuring",
+                "style": "clear",
+                "emoji": False
+            },
+            "surprise": {
+                "tone": "informative",
+                "style": "explanatory",
+                "emoji": True
+            },
+            "disgust": {
+                "tone": "neutral",
+                "style": "factual",
+                "emoji": False
+            },
+            "neutral": {
+                "tone": "balanced",
+                "style": "informative",
+                "emoji": True
+            }
+        }
+
         # Initialize sentiment analysis pipeline
         try:
             self.sentiment_analyzer = pipeline(
@@ -17,61 +60,25 @@ class SentimentAnalyzer:
                 model="distilbert-base-uncased-finetuned-sst-2-english",
                 return_all_scores=True
             )
-            
-            # Initialize emotion detection pipeline
-            self.emotion_detector = pipeline(
-                "text-classification", 
-                model="j-hartmann/emotion-english-distilroberta-base", 
-                return_all_scores=True
-            )
-            
-            # Cache for storing recent sentiment scores
-            self.sentiment_history = {}
-            
-            # Mapping of emotions to response strategies
-            self.emotion_strategies = {
-                "joy": {
-                    "tone": "enthusiastic",
-                    "style": "conversational",
-                    "emoji": True
-                },
-                "sadness": {
-                    "tone": "empathetic",
-                    "style": "supportive",
-                    "emoji": False
-                },
-                "anger": {
-                    "tone": "calm",
-                    "style": "direct",
-                    "emoji": False
-                },
-                "fear": {
-                    "tone": "reassuring",
-                    "style": "clear",
-                    "emoji": False
-                },
-                "surprise": {
-                    "tone": "informative",
-                    "style": "explanatory",
-                    "emoji": True
-                },
-                "disgust": {
-                    "tone": "neutral",
-                    "style": "factual",
-                    "emoji": False
-                },
-                "neutral": {
-                    "tone": "balanced",
-                    "style": "informative",
-                    "emoji": True
-                }
-            }
-            
+
+            # Initialize emotion detection pipeline (skip if model is unavailable)
+            try:
+                self.emotion_detector = pipeline(
+                    "text-classification",
+                    model="j-hartmann/emotion-english-distilroberta-base",
+                    return_all_scores=True
+                )
+            except Exception as e:
+                print(f"Warning: Could not load emotion detection model: {e}")
+                self.emotion_detector = None
+
             # Flag to indicate if models loaded successfully
             self.models_loaded = True
-            
+
         except Exception as e:
-            st.error(f"Error loading sentiment analysis models: {str(e)}")
+            print(f"Error loading sentiment analysis models: {str(e)}")
+            self.sentiment_analyzer = None
+            self.emotion_detector = None
             self.models_loaded = False
     
     def analyze_sentiment(self, text: str) -> Dict[str, Any]:
@@ -96,31 +103,37 @@ class SentimentAnalyzer:
         try:
             # Get sentiment (positive/negative)
             sentiment_results = self.sentiment_analyzer(text)[0]
-            
+
             # Convert to a simpler format
             sentiment_dict = {item["label"]: item["score"] for item in sentiment_results}
-            
+
             # Determine the dominant sentiment
             dominant_sentiment = max(sentiment_dict, key=sentiment_dict.get)
             sentiment_score = sentiment_dict[dominant_sentiment]
-            
+
             # Normalize sentiment score to a -1 to 1 scale where:
             # -1 is very negative, 0 is neutral, 1 is very positive
             normalized_score = sentiment_dict.get("POSITIVE", 0.5) - sentiment_dict.get("NEGATIVE", 0.5)
-            
-            # Get emotion (joy, sadness, anger, fear, surprise, disgust)
-            emotion_results = self.emotion_detector(text)[0]
-            
-            # Convert to a simpler format
-            emotion_dict = {item["label"]: item["score"] for item in emotion_results}
-            
-            # Determine the dominant emotion
-            dominant_emotion = max(emotion_dict, key=emotion_dict.get)
-            emotion_score = emotion_dict[dominant_emotion]
-            
+
+            # Get emotion (joy, sadness, anger, fear, surprise, disgust) if available
+            if self.emotion_detector is not None:
+                emotion_results = self.emotion_detector(text)[0]
+
+                # Convert to a simpler format
+                emotion_dict = {item["label"]: item["score"] for item in emotion_results}
+
+                # Determine the dominant emotion
+                dominant_emotion = max(emotion_dict, key=emotion_dict.get)
+                emotion_score = emotion_dict[dominant_emotion]
+            else:
+                # Default to neutral if emotion detector is not available
+                dominant_emotion = "neutral"
+                emotion_score = 1.0
+                emotion_dict = {"neutral": 1.0}
+
             # Calculate overall confidence
             confidence = (sentiment_score + emotion_score) / 2
-            
+
             return {
                 "sentiment": dominant_sentiment.lower(),
                 "sentiment_score": normalized_score,

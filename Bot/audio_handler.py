@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 api_key = os.getenv("OPENAI_API_KEY")
-hf_token = os.getenv("HF_TOKEN")  # Add this to your .env file if you have one
+hf_token = os.getenv("HF_TOKEN")  
 
 class AudioHandler:
     def __init__(self, api_key):

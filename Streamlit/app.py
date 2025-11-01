@@ -5,8 +5,7 @@ import streamlit as st
 from langchain_core.messages import HumanMessage
 import json
 from datetime import datetime, timedelta
-from langchain.chat_models import ChatOpenAI
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import docx
 import tempfile
@@ -57,59 +56,60 @@ def debug_basic_response(message):
 
 # Update the direct_openai_response function to include chat history and sentiment analysis
 def direct_openai_response(question, session_id):
-    """Get direct response from OpenAI API"""
-    if not st.session_state.openai_api_key:
-        return "Please provide an OpenAI API key to continue."
-        
+    """Generate a direct response using OpenAI API with streaming"""
     try:
-        # Get the current language
-        current_language = st.session_state.get("current_language", "English")
+        # Get API key from session state first, then fall back to environment
+        api_key = st.session_state.get("openai_api_key")
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY")
+            st.warning("Using environment API key as fallback. This may cause quota issues.")
         
-        # Initialize the model
-        current_personality = st.session_state.get(f"personality_{session_id}", "You are a helpful assistant.")
-        # Add mandatory language requirement to personality
-        current_personality += f"\n\nMANDATORY REQUIREMENT: You MUST respond in {current_language} ONLY. ALL text in your response MUST be in {current_language}."
-        
-        client = OpenAI(api_key=st.session_state.openai_api_key)
-        
-        # Initialize sentiment analyzer if not already initialized
-        if "sentiment_analyzer" not in st.session_state:
-            from Bot.sentiment_analyzer import SentimentAnalyzer
-            st.session_state.sentiment_analyzer = SentimentAnalyzer()
+        if not api_key:
+            st.error("No API key found in session or environment")
+            return "Error: No API key available"
             
-        # Analyze sentiment
-        sentiment = st.session_state.sentiment_analyzer.analyze_sentiment(question)
+        # Initialize client
+        client = OpenAI(api_key=api_key)
         
-        # Get chat history
-        chat_history = get_chat_history_from_supabase(session_id)
+        # Get current language from session state
+        current_language = st.session_state.get("language", "English")
         
-        # Format chat history for the API
-        formatted_messages = [
-            {"role": "system", "content": current_personality}
+        # Get personality from session state
+        personality = st.session_state.get("personality", "You are a helpful assistant.")
+        
+        # Create messages list with personality and language requirement
+        messages = [
+            {"role": "system", "content": personality + f"\n\nMANDATORY REQUIREMENT: You MUST respond in {current_language} ONLY. ALL text in your response MUST be in {current_language}."},
+            {"role": "user", "content": question}
         ]
         
-        # Add recent chat history
-        for msg in chat_history[-5:]:  # Last 5 messages
-            formatted_messages.append({"role": msg["role"], "content": msg["message"]})
-        
-        # Add the current message
-        formatted_messages.append({"role": "user", "content": question})
-        
-        # Get the selected model from session state
-        model_name = available_models[st.session_state.get("selected_model", "GPT-4")]
-        
-        # Make API call with selected model
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=formatted_messages,
-            temperature=0.7,
+        # Generate streaming response
+        stream = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            stream=True
         )
         
-        # Return the response text
-        return response.choices[0].message.content
+        # Process the stream and accumulate the response
+        full_response = ""
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    full_response += chunk.choices[0].delta.content
+                    message_placeholder.markdown(full_response + "▌")
+            message_placeholder.markdown(full_response)
+        
+        return full_response
+        
     except Exception as e:
-        st.error(f"Error in direct OpenAI call: {str(e)}")
-        return f"I'm having trouble generating a response right now. Error: {str(e)}"
+        error_message = str(e)
+        if "quota" in error_message.lower() or "rate limit" in error_message.lower():
+            st.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
+            return "I apologize, but I've reached the API usage limits. Please try again later or check your API key limits."
+        else:
+            st.error(f"Error generating response: {error_message}")
+            return f"I encountered an error while generating the response: {error_message}"
 
 # Adjust Python path to include the `Bot/` directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Bot")))
@@ -136,7 +136,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Get OpenAI API key from environment variables
-openai_api_key = os.getenv("OPENAI_API_KEY")
+
 
 # Initialize Google API keys
 google_api_key = os.getenv("GOOGLE_API_KEY")
@@ -1382,6 +1382,25 @@ def display_logo():
 # Display the logo and title
 display_logo()
 
+# Text input - MUST be at top level, not inside any container or conditional
+if prompt := st.chat_input("Message Azazel...", disabled=not st.session_state.openai_api_key):
+    # Display the user's message
+    with st.chat_message("user"):
+        st.write(prompt)
+
+    # Save user message to Supabase
+    save_message_to_supabase(
+        st.session_state.current_session,
+        "user",
+        prompt
+    )
+
+    # Store the message in session state for processing
+    st.session_state.pending_user_message = prompt
+
+    # Rerun to process the message
+    st.rerun()
+
 if not st.session_state.openai_api_key:
     st.error("Please enter your OpenAI API key in the sidebar to start chatting!")
 else:
@@ -1411,9 +1430,14 @@ else:
     
     # Display chat history
     with chat_container:
+        # Display existing messages
         for msg in chat_history:
             with st.chat_message(msg["role"]):
                 st.write(msg["message"])
+        
+        # Create a placeholder for the streaming response
+        if "streaming_response" not in st.session_state:
+            st.session_state.streaming_response = st.empty()
         
         # Add a div at the bottom for auto-scrolling
         st.markdown('<div id="scroll-to-bottom"></div>', unsafe_allow_html=True)
@@ -1434,95 +1458,70 @@ else:
     # Add this after the chat history display
     if use_rag:
         st.info("📄 Document mode active: I'll use your uploaded documents to answer questions, but I can still chat about other topics too.")
-    
-    # Input area container
-    input_container = st.container()
-    with input_container:
-        # Create tabs for text and voice input
-        input_tab, voice_tab = st.tabs(["Text Input", "Voice Input"])
-        
-        with input_tab:
-            # Text input
-            if prompt := st.chat_input("Message Azazel..."):
-                # Display the user's message
-                with st.chat_message("user"):
-                    st.write(prompt)
-                
-                # Save user message to Supabase
-                save_message_to_supabase(
-                    st.session_state.current_session,
-                    "user",
-                    prompt
-                )
-                
-                # Store the message in session state for processing
-                st.session_state.pending_user_message = prompt
-                
-                # Rerun to process the message
-                st.rerun()
-        
-        with voice_tab:
-            # This will show the audio recorder directly without needing a button click
-            try:
-                recording_result = audio_handler.record_audio(duration=5)
-                
-                # Check if we got a recording
-                if recording_result and recording_result[0] is not None:
-                    audio_path, _ = recording_result
-                    
-                    # Process the recording with a timeout
-                    with st.spinner("Transcribing audio..."):
-                        try:
-                            # Set a timeout for transcription (30 seconds)
-                            import threading
-                            import time
-                            
-                            result = [None]
-                            def transcribe_with_timeout():
-                                result[0] = audio_handler.transcribe_audio(audio_path)
-                            
-                            thread = threading.Thread(target=transcribe_with_timeout)
-                            thread.start()
-                            
-                            # Wait for up to 30 seconds
-                            timeout = 30
-                            start_time = time.time()
-                            while thread.is_alive() and time.time() - start_time < timeout:
-                                time.sleep(0.1)
-                            
-                            if thread.is_alive():
-                                st.error(f"Transcription timed out after {timeout} seconds. Please try again.")
-                                transcript = None
-                            else:
-                                transcript = result[0]
-                        except Exception as e:
-                            st.error(f"Error during transcription: {str(e)}")
+
+    # Voice input section (in expander since chat_input must be at top level)
+    with st.expander("🎤 Voice Input", expanded=False):
+        # This will show the audio recorder directly without needing a button click
+        try:
+            recording_result = audio_handler.record_audio(duration=5)
+
+            # Check if we got a recording
+            if recording_result and recording_result[0] is not None:
+                audio_path, _ = recording_result
+
+                # Process the recording with a timeout
+                with st.spinner("Transcribing audio..."):
+                    try:
+                        # Set a timeout for transcription (30 seconds)
+                        import threading
+                        import time
+
+                        result = [None]
+                        def transcribe_with_timeout():
+                            result[0] = audio_handler.transcribe_audio(audio_path)
+
+                        thread = threading.Thread(target=transcribe_with_timeout)
+                        thread.start()
+
+                        # Wait for up to 30 seconds
+                        timeout = 30
+                        start_time = time.time()
+                        while thread.is_alive() and time.time() - start_time < timeout:
+                            time.sleep(0.1)
+
+                        if thread.is_alive():
+                            st.error(f"Transcription timed out after {timeout} seconds. Please try again.")
                             transcript = None
-                    
-                    if transcript:
-                        st.success(f"Transcribed: {transcript}")
-                        
-                        # Add a button to send the transcript
-                        if st.button("Send this message"):
-                            # Display the transcript to the user
-                            with st.chat_message("user"):
-                                st.write(transcript)
-                                
-                            # Save user message
-                            save_message_to_supabase(
-                                st.session_state.current_session,
-                                "user",
-                                transcript
-                            )
-                            
-                            # Store the transcript in session state for processing
-                            st.session_state.pending_user_message = transcript
-                            
-                            # Rerun to process the message
-                            st.rerun()
-            except Exception as e:
-                st.error(f"Error with audio recording: {str(e)}")
-                st.info("Please make sure you have the necessary permissions for microphone access.")
+                        else:
+                            transcript = result[0]
+                    except Exception as e:
+                        st.error(f"Error during transcription: {str(e)}")
+                        transcript = None
+
+                if transcript:
+                    st.success(f"Transcribed: {transcript}")
+
+                    # Add a button to send the transcript
+                    if st.button("Send this message"):
+                        # Display the transcript to the user
+                        with st.chat_message("user"):
+                            st.write(transcript)
+
+                        # Save user message
+                        save_message_to_supabase(
+                            st.session_state.current_session,
+                            "user",
+                            transcript
+                        )
+
+                        # Store the transcript in session state for processing
+                        st.session_state.pending_user_message = transcript
+
+                        # Rerun to process the message
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Error with audio recording: {str(e)}")
+            st.info("Please make sure you have the necessary permissions for microphone access.")
 
     # Modify the section where you handle the pending user message
     if "pending_user_message" in st.session_state:

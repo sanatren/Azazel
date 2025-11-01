@@ -405,51 +405,8 @@ class SearchChain:
                     "url": url,
                     "content": "",
                     "is_url_processing": True,
-                    "language": language  # Pass along the language preference
+                    "language": language
                 }
-            
-            # Create a prompt template for URL processing with strong language enforcement
-            url_prompt_template = PromptTemplate(
-                input_variables=["url", "content", "question", "chat_history", "language", "personality"],
-                template="""
-                {personality}
-                CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
-                
-                You MUST embody the {personality} personality described above in ALL your responses, regardless of the URL content.
-                
-                You are an AI assistant that helps users understand content from URLs.
-                
-                URL: {url}
-                
-                Content from the URL:
-                ---------------------
-                {content}
-                ---------------------
-                
-                User's question: {question}
-                
-                Previous conversation:
-                ---------------------
-                {chat_history}
-                ---------------------
-                
-                Based on the content from the URL and the previous conversation, provide a helpful response to the user's request.
-                If the user asked to summarize, provide a concise summary of the main points.
-                If the user asked a specific question about the content, answer it based on the information provided.
-                If the content is not relevant to the request, explain why and provide the best response you can.
-                
-                CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning.
-                The personality should affect HOW you respond, not WHAT information you provide.
-                
-                MANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}.
-                """
-            )
-            
-            # Create a chain for URL processing
-            url_chain = LLMChain(
-                llm=self.llm,
-                prompt=url_prompt_template
-            )
             
             # Format chat history for context
             formatted_history = ""
@@ -457,23 +414,44 @@ class SearchChain:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 formatted_history += f"{role}: {msg['message']}\n"
             
-            # Generate the response
-            response = url_chain.invoke({
-                "url": url,
-                "content": content,
-                "question": question,
-                "chat_history": formatted_history,
-                "language": language,
-                "personality": self.personality
-            })
+            # Create the messages list for streaming
+            messages = [
+                {"role": "system", "content": self.personality + f"\n\nMANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}."},
+                {"role": "user", "content": f"""
+                URL: {url}
+                
+                Content from the URL:
+                {content}
+                
+                User's question: {question}
+                
+                Previous conversation:
+                {formatted_history}
+                
+                Based on the content from the URL and the previous conversation, provide a helpful response to the user's request.
+                If the user asked to summarize, provide a concise summary of the main points.
+                If the user asked a specific question about the content, answer it based on the information provided.
+                If the content is not relevant to the request, explain why and provide the best response you can.
+                """}
+            ]
+            
+            # Generate streaming response
+            stream = self.llm.stream(messages)
+            full_response = ""
+            
+            # Process the stream and return the final response
+            for chunk in stream:
+                if chunk.content is not None:
+                    full_response += chunk.content
             
             return {
-                "answer": response["text"],
+                "answer": full_response,
                 "url": url,
-                "content": content[:500] + "..." if len(content) > 500 else content,  # Truncate for display
-                "is_url_processing": True,  # Add this flag to indicate it's URL processing
-                "language": language  # Pass along the language preference
+                "content": content[:500] + "..." if len(content) > 500 else content,
+                "is_url_processing": True,
+                "language": language
             }
+            
         except Exception as e:
             st.error(f"Error processing URL: {str(e)}")
             return {
@@ -481,7 +459,7 @@ class SearchChain:
                 "url": url,
                 "content": "",
                 "is_url_processing": True,
-                "language": language  # Pass along the language preference
+                "language": language
             }
 
     def search_with_web(self, query: str, chat_history: List[Dict[str, Any]], language: str = "English") -> Dict[str, Any]:
@@ -502,19 +480,17 @@ class SearchChain:
             
             # If search is not needed, return a response indicating that
             if not search_determination["search_needed"]:
-                
                 return {
                     "answer": None,  # Signal to use the main model without search
                     "search_results": None,
                     "is_web_search": False,
                     "no_search_needed": True,
                     "reasoning": search_determination["reasoning"],
-                    "language": language  # Pass along the language preference
+                    "language": language
                 }
             
             # Use the reformulated query from the LLM
             improved_query = search_determination["reformulated_query"]
-            
             
             # Format chat history for context
             formatted_history = ""
@@ -532,30 +508,53 @@ class SearchChain:
                     "search_results": None,
                     "is_web_search": False,
                     "error": str(e),
-                    "language": language  # Pass along the language preference
+                    "language": language
                 }
             
             # Strongly emphasize language requirement in the system prompt
             strong_language_personality = self.personality + f"\n\nMANDATORY REQUIREMENT: You MUST respond in {language} ONLY. ALL text in your response MUST be in {language}."
             
-            # Generate the response
+            # Generate the streaming response
             try:
-                response = self.search_chain.invoke({
-                    "question": query,  # Use the original question for response generation
-                    "search_results": self.format_search_results(search_results),
-                    "chat_history": formatted_history,
-                    "language": language,
-                    "personality": strong_language_personality
-                })
+                # Create the messages list for streaming
+                messages = [
+                    {"role": "system", "content": strong_language_personality},
+                    {"role": "user", "content": f"""
+                    Question: {query}
+                    
+                    Search results:
+                    {self.format_search_results(search_results)}
+                    
+                    Previous conversation:
+                    {formatted_history}
+                    
+                    Based on the search results and conversation history, provide a comprehensive answer.
+                    Guidelines:
+                    1. Cite your sources by mentioning the websites or Wikipedia articles you're referencing
+                    2. If the search results don't provide relevant information, say so and provide your best answer
+                    3. Be concise but thorough
+                    4. If there are multiple perspectives on a topic, present them fairly
+                    """}
+                ]
+                
+                # Generate streaming response
+                stream = self.llm.stream(messages)
+                full_response = ""
+                
+                # Process the stream and return the final response
+                for chunk in stream:
+                    if chunk.content is not None:
+                        full_response += chunk.content
                 
                 return {
-                    "answer": response["text"],
+                    "answer": full_response,
                     "search_results": search_results,
                     "is_web_search": True,
-                    "improved_query": improved_query,  # Include the improved query in the response
+                    "improved_query": improved_query,
                     "reasoning": search_determination["reasoning"],
-                    "language": language  # Pass along the language preference
+                    "language": language
                 }
+                
             except Exception as e:
                 error_message = str(e)
                 if "quota" in error_message.lower() or "rate limit" in error_message.lower():
@@ -566,7 +565,7 @@ class SearchChain:
                         "is_web_search": True,
                         "improved_query": improved_query,
                         "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results),
-                        "language": language  # Pass along the language preference
+                        "language": language
                     }
                 else:
                     st.error(f"Error generating search response: {error_message}")
@@ -576,7 +575,7 @@ class SearchChain:
                         "is_web_search": True,
                         "improved_query": improved_query,
                         "raw_search_results": self.format_search_results(search_results)[:1000] + "..." if len(self.format_search_results(search_results)) > 1000 else self.format_search_results(search_results),
-                        "language": language  # Pass along the language preference
+                        "language": language
                     }
         except Exception as e:
             st.error(f"Error in web search determination: {str(e)}")
@@ -584,7 +583,7 @@ class SearchChain:
                 "answer": f"I encountered an error while determining whether web search is needed: {str(e)}. Let me try to answer based on what I know.",
                 "search_results": None,
                 "is_web_search": False,
-                "language": language  # Pass along the language preference
+                "language": language
             }
 
     def determine_search_need_with_llm(self, query: str, chat_history: List[Dict[str, str]], language: str = "English", personality: str = None) -> Dict[str, Any]:
