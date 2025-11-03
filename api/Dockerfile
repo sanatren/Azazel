@@ -10,17 +10,17 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy requirements file from api directory
+COPY api/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Bot modules
-COPY ../Bot /app/Bot
+# Copy Bot modules (needed for API)
+COPY Bot /app/Bot
 
 # Copy API code
-COPY . /app/api
+COPY api /app/api
 
 # Set Python path
 ENV PYTHONPATH=/app
