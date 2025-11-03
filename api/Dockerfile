@@ -13,8 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements file from api directory
 COPY api/requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies - optimized for size
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    # Clean up pip cache
+    rm -rf /root/.cache/pip/*
 
 # Copy Bot modules (needed for API)
 COPY Bot /app/Bot

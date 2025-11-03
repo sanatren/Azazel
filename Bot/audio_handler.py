@@ -6,8 +6,6 @@ import soundfile as sf
 import numpy as np
 from datetime import datetime
 import time
-import torch
-from transformers import pipeline
 import base64
 
 # Try to import the mic recorder, but provide a fallback if not available
@@ -20,8 +18,7 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
-hf_token = os.getenv("HF_TOKEN")  
+api_key = os.getenv("OPENAI_API_KEY")  
 
 class AudioHandler:
     def __init__(self, api_key):

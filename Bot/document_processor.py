@@ -4,18 +4,17 @@ import tempfile
 import streamlit as st
 from typing import List, Dict, Any, Optional
 import docx
-import pandas as pd
 from pptx import Presentation
 import pdfplumber
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from vision_processor import VisionProcessor
 
 class DocumentProcessor:
     """Process various document types for RAG applications"""
-    
+
     def __init__(self, api_key=None):
         """Initialize the document processor"""
         # Initialize the text splitter for chunking
@@ -24,26 +23,17 @@ class DocumentProcessor:
             chunk_overlap=200,
             length_function=len,
         )
-        
-        # Initialize the embeddings model
-        try:
-            # Try HuggingFace embeddings first
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
-            )
-            print("Using HuggingFace embeddings")
-        except Exception as e:
-            # Fall back to OpenAI embeddings
-            from langchain_openai import OpenAIEmbeddings
-            print(f"Falling back to OpenAI embeddings due to: {e}")
-            self.embeddings = OpenAIEmbeddings(
-                model="text-embedding-ada-002",
-                openai_api_key=api_key
-            )
-        
+
+        # Use OpenAI embeddings (no heavy dependencies needed)
+        self.embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small",  # Cheaper and faster than ada-002
+            openai_api_key=api_key or os.getenv("OPENAI_API_KEY")
+        )
+        print("Using OpenAI embeddings")
+
         # Dictionary to store vectorstores by session ID
         self.vectorstores = {}
-        
+
         # Initialize vision processor with provided API key or fallback to env
         if api_key:
             self.vision_processor = VisionProcessor(api_key)

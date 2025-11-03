@@ -11,21 +11,17 @@ langchain-openai>=0.0.2
 langchain-core>=0.1.10
 langchain-community>=0.0.13
 langchain-text-splitters>=0.0.1
-langchain-huggingface>=0.0.1
 openai>=1.10.0
 
 # Document processing
 python-docx>=1.1.0
 pdfplumber>=0.10.0
 python-pptx>=0.6.23
-pandas>=2.1.0
 openpyxl>=3.1.0
+numpy>=1.24.0
 
-# Vector stores and embeddings
+# Vector stores (using OpenAI embeddings instead of local models)
 faiss-cpu>=1.8.0
-sentence-transformers>=2.3.0
-transformers>=4.30.0
-torch>=2.0.0
 
 # Web search
 google-api-python-client>=2.100.0
@@ -35,10 +31,6 @@ requests>=2.31.0
 # Image processing
 Pillow>=10.0.0
 
-# Audio processing
-SpeechRecognition>=3.10.0
-pydub>=0.25.0
-
 # Database
 supabase>=2.0.0
 
@@ -47,3 +39,9 @@ python-dotenv>=1.0.0
 
 # Utilities
 httpx>=0.26.0
+
+# Note: Removed heavy dependencies to reduce Docker image size:
+# - torch, transformers, sentence-transformers (used only for sentiment analysis)
+# - pandas (not critical for core functionality)
+# - audio processing libraries (can be added later if needed)
+# Using OpenAI embeddings instead of HuggingFace for document processing
