@@ -1,9 +1,8 @@
 import os
 from typing import Dict, Any, List
 import streamlit as st
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
 from code_executor import CodeExecutor
 
 class ProgrammingAssistant:
@@ -19,102 +18,6 @@ class ProgrammingAssistant:
             model="gpt-4o-mini",
             openai_api_key=api_key,
             temperature=0.2
-        )
-        
-        # Create the prompt template for code generation
-        self.code_generation_template = PromptTemplate(
-            input_variables=["question", "chat_history", "language", "personality"],
-            template="""
-            {personality}
-            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
-            
-            You MUST embody the {personality} personality described above in ALL your explanations, while maintaining technical accuracy in code.
-            
-            You are an AI programming assistant specialized in Python. Your task is to help users with programming questions by generating and executing code.
-            
-            
-            Previous conversation:
-            ---------------------
-            {chat_history}
-            ---------------------
-            
-            User's question: {question}
-            
-            If the user is asking a programming question that requires code execution, follow these steps:
-            1. Analyze the problem carefully
-            2. Generate Python code (if the programming language is not specified in query) that solves the problem
-            3. Explain what the code does
-            
-            Format your response as follows:
-            
-            ```explanation
-            [Your explanation of the approach here - MUST reflect your personality]
-            ```
-            
-            ```python
-            [Your Python code here - this remains technically accurate regardless of personality]
-            ```
-            
-            ```explanation
-            [Additional explanation or expected output here - MUST reflect your personality]
-            ```
-            
-            IMPORTANT GUIDELINES:
-            - Only use standard Python libraries or these allowed libraries: math, random, datetime, collections, itertools, functools, json, re, string, time, numpy, pandas, matplotlib, seaborn, sklearn
-            - Do not use these forbidden libraries: os, subprocess, sys, shutil, requests, socket, importlib, pickle, multiprocessing
-            - Keep the code simple and focused on solving the specific problem
-            - Ensure the code is complete and ready to execute
-            - If the question is not a programming question, just provide a helpful response without code
-            - ALL explanations (everything outside of code blocks) MUST be in {language} AND MUST reflect your personality
-            - The code itself should remain in Python and be technically accurate
-            
-            Remember to respond in {language}.
-            """
-        )
-        
-        # Create the chain for code generation
-        self.code_generation_chain = LLMChain(
-            llm=self.llm,
-            prompt=self.code_generation_template
-        )
-        
-        # Create the prompt template for result interpretation
-        self.result_interpretation_template = PromptTemplate(
-            input_variables=["question", "code", "execution_result", "language", "personality"],
-            template="""
-            {personality}
-
-            CRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}.
-            
-            You MUST embody the {personality} personality described above in ALL your explanations, while maintaining technical accuracy.
-            
-            You are an AI programming assistant. You've generated code to answer a user's question, and the code has been executed.
-            
-            User's question: {question}
-            
-            Code that was executed:
-            ```python
-            {code}
-            ```
-            
-            Execution result:
-            ```
-            {execution_result}
-            ```
-            
-            Please interpret the execution result and provide a helpful response to the user. If there were errors, explain what went wrong and how to fix it.
-            
-            CRITICAL: Your explanations MUST maintain the personality traits, tone, and style described at the beginning.
-            The personality affects HOW you explain things, not the technical accuracy of your explanation.
-            
-            Remember to respond in {language}.
-            """
-        )
-        
-        # Create the chain for result interpretation
-        self.result_interpretation_chain = LLMChain(
-            llm=self.llm,
-            prompt=self.result_interpretation_template
         )
     
     def is_programming_question(self, question: str) -> bool:
@@ -264,62 +167,121 @@ class ProgrammingAssistant:
         for msg in chat_history[-10:]:  # Increased from 5 to 10 messages for better context
             role = "User" if msg["role"] == "user" else "Assistant"
             formatted_history += f"{role}: {msg['message']}\n"
-        
-        # Generate code using the code generation chain
-        response = self.code_generation_chain.invoke({
-            "question": question,
-            "chat_history": formatted_history,
-            "language": language,
-            "personality": personality
-        })
-        
+
+        # Generate code using direct LLM invocation
+        messages = [
+            {"role": "system", "content": personality + f"\n\nCRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}."},
+            {"role": "user", "content": f"""
+            You are an AI programming assistant specialized in Python. Your task is to help users with programming questions by generating and executing code.
+
+            Previous conversation:
+            ---------------------
+            {formatted_history}
+            ---------------------
+
+            User's question: {question}
+
+            If the user is asking a programming question that requires code execution, follow these steps:
+            1. Analyze the problem carefully
+            2. Generate Python code (if the programming language is not specified in query) that solves the problem
+            3. Explain what the code does
+
+            Format your response as follows:
+
+            ```explanation
+            [Your explanation of the approach here - MUST reflect your personality]
+            ```
+
+            ```python
+            [Your Python code here - this remains technically accurate regardless of personality]
+            ```
+
+            ```explanation
+            [Additional explanation or expected output here - MUST reflect your personality]
+            ```
+
+            IMPORTANT GUIDELINES:
+            - Only use standard Python libraries or these allowed libraries: math, random, datetime, collections, itertools, functools, json, re, string, time, numpy, pandas, matplotlib, seaborn, sklearn
+            - Do not use these forbidden libraries: os, subprocess, sys, shutil, requests, socket, importlib, pickle, multiprocessing
+            - Keep the code simple and focused on solving the specific problem
+            - Ensure the code is complete and ready to execute
+            - If the question is not a programming question, just provide a helpful response without code
+            - ALL explanations (everything outside of code blocks) MUST be in {language} AND MUST reflect your personality
+            - The code itself should remain in Python and be technically accurate
+
+            Remember to respond in {language}.
+            """}
+        ]
+
+        response = self.llm.invoke(messages)
+
         # Extract code blocks from the response
-        code_blocks = self.extract_code_blocks(response["text"])
+        code_blocks = self.extract_code_blocks(response.content)
         
         # If no code blocks were found, return the response as is
         if not code_blocks:
             return {
-                "answer": response["text"],
+                "answer": response.content,
                 "code_executed": False,
                 "execution_result": None
             }
-        
+
         # Get the first code block
         code = code_blocks[0]
-        
+
         # Check if code execution is disabled in session state
         disable_execution = st.session_state.get("disable_code_execution", True)
-        
+
         if disable_execution:
             # Skip execution if disabled
             return {
-                "answer": response["text"],
+                "answer": response.content,
                 "code": code,
                 "code_executed": False,
                 "execution_result": None
             }
-        
+
         # Execute the code if not disabled
         execution_result = self.code_executor.execute_code(code)
-        
+
         # Format the execution result
         formatted_result = ""
         if execution_result["success"]:
             formatted_result += execution_result["output"]
         else:
             formatted_result += f"Error: {execution_result['error']}"
-        
-        # Interpret the result
-        interpretation = self.result_interpretation_chain.invoke({
-            "question": question,
-            "code": code,
-            "execution_result": formatted_result,
-            "language": language,
-            "personality": personality
-        })
-        
+
+        # Interpret the result using direct LLM invocation
+        interpretation_messages = [
+            {"role": "system", "content": personality + f"\n\nCRITICAL INSTRUCTION: You must respond in {language}. All explanations (not code) must be in {language}."},
+            {"role": "user", "content": f"""
+            You are an AI programming assistant. You've generated code to answer a user's question, and the code has been executed.
+
+            User's question: {question}
+
+            Code that was executed:
+            ```python
+            {code}
+            ```
+
+            Execution result:
+            ```
+            {formatted_result}
+            ```
+
+            Please interpret the execution result and provide a helpful response to the user. If there were errors, explain what went wrong and how to fix it.
+
+            CRITICAL: Your explanations MUST maintain the personality traits, tone, and style described at the beginning.
+            The personality affects HOW you explain things, not the technical accuracy of your explanation.
+
+            Remember to respond in {language}.
+            """}
+        ]
+
+        interpretation = self.llm.invoke(interpretation_messages)
+
         return {
-            "answer": interpretation["text"],
+            "answer": interpretation.content,
             "code_executed": True,
             "code": code,
             "execution_result": formatted_result

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      - ./Bot:/app/Bot
+      - ./api:/app/api
+      - ./.env:/app/.env
+    restart: unless-stopped
+    networks:
+      - azazel-network
+
+  # Frontend (HTML/CSS/JS)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - azazel-network
+
+networks:
+  azazel-network:
+    driver: bridge

@@ -1591,7 +1591,7 @@ else:
                 try:
                     # First check if user has exceeded their API quota
                     if st.session_state.get("user_api_quota_exceeded", False):
-                        st.warning("API quota exceeded, using heuristic search determination")
+                        
                         needs_search = search_chain.needs_search(st.session_state.pending_user_message)
                     else:
                         # Get full chat history

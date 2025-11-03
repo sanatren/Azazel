@@ -1,9 +1,8 @@
 import os
 from typing import List, Dict, Any
 import streamlit as st
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
 from document_processor import DocumentProcessor
 
 class RAGChain:
@@ -15,38 +14,6 @@ class RAGChain:
         self.llm = ChatOpenAI(model="gpt-4o-mini", openai_api_key=api_key, temperature=0.5)
         self.personality = "You are a helpful assistant."
         
-        self.prompt_template = PromptTemplate(
-            input_variables=["question", "context", "chat_history", "language", "personality"],
-            template="""
-            {personality}
-            CRITICAL INSTRUCTION: You must respond in {language}. All text outside of direct quotes must be in {language}.
-            
-            You MUST embody the {personality} personality described above in ALL your responses, regardless of the document content.
-            
-            You are an AI assistant that answers questions using documents and images.
-            
-            Available Context (which may include multiple documents and images):
-            ---------------------
-            {context}
-            ---------------------
-            
-            Previous conversation:
-            ---------------------
-            {chat_history}
-            ---------------------
-            
-            Answer the question: {question}
-            
-            When answering, consider information from ALL available documents. If multiple documents are referenced, 
-            synthesize information across them. Mention document names when appropriate to clarify sources.
-            
-            IMPORTANT: Your response MUST maintain the personality traits, tone, and style described at the beginning. 
-            The personality should affect HOW you respond, not WHAT information you provide from the documents.
-            
-            Remember to respond in {language}.
-            """
-        )
-        self.chain = LLMChain(llm=self.llm, prompt=self.prompt_template)
 
     def is_relevant_to_documents(self, query: str, session_id: str) -> bool:
         """Smart relevance check considering both text and images"""
@@ -106,16 +73,35 @@ class RAGChain:
                 for msg in chat_history[-7:]
             )
 
-            result = self.chain.invoke({
-                "question": question,
-                "context": context,
-                "chat_history": formatted_history,
-                "language": language,
-                "personality": self.personality
-            })
-            
+            # Use direct LLM invocation instead of LLMChain
+            messages = [
+                {"role": "system", "content": self.personality + f"\n\nCRITICAL INSTRUCTION: You must respond in {language}. All text outside of direct quotes must be in {language}."},
+                {"role": "user", "content": f"""
+            You are an AI assistant that answers questions using documents and images.
+
+            Available Context (which may include multiple documents and images):
+            ---------------------
+            {context}
+            ---------------------
+
+            Previous conversation:
+            ---------------------
+            {formatted_history}
+            ---------------------
+
+            Answer the question: {question}
+
+            When answering, consider information from ALL available documents. If multiple documents are referenced,
+            synthesize information across them. Mention document names when appropriate to clarify sources.
+
+            Remember to respond in {language}.
+                """}
+            ]
+
+            result = self.llm.invoke(messages)
+
             return {
-                "answer": result["text"],
+                "answer": result.content,
                 "sources": text_docs,
                 "image_analysis": image_analysis
             }

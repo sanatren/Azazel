@@ -1,9 +1,8 @@
 import os
 from typing import Dict, Any, List
 import streamlit as st
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
 from web_search import WebSearchTool
 from dotenv import load_dotenv
 import re
@@ -45,50 +44,7 @@ class SearchChain:
             temperature=0.2
         )
         
-        # Create the prompt template for search-augmented responses
-        self.search_prompt_template = PromptTemplate(
-            input_variables=["question", "search_results", "chat_history", "language", "personality"],
-            template="""
-            {personality}
-            
-            CRITICAL INSTRUCTION: You must respond in {language}. All text must be in {language}.
-            
-            You MUST embody the {personality} personality described above in ALL your responses, regardless of the web search content.
-            
-            You are an AI assistant with the ability to search the web for up-to-date information.
-            
-            User's question: {question}
-            
-            Search results:
-            ---------------------
-            {search_results}
-            ---------------------
-            
-            Previous conversation:
-            ---------------------
-            {chat_history}
-            ---------------------
-            
-            Based on the search results and the conversation history, provide a comprehensive answer to the user's question.
-            
-            Guidelines:
-            1. Cite your sources by mentioning the websites or Wikipedia articles you're referencing
-            2. If the search results don't provide relevant information, say so and provide your best answer based on your knowledge
-            3. Be concise but thorough
-            4. If there are multiple perspectives on a topic, present them fairly
-            
-            CRITICAL: Your response MUST maintain the personality traits, tone, and style described at the beginning. 
-            The personality should affect HOW you respond, not WHAT information you provide.
-            
-            Remember to respond in {language}.
-            """
-        )
-        
-        # Create the chain for search-augmented responses
-        self.search_chain = LLMChain(
-            llm=self.llm,
-            prompt=self.search_prompt_template
-        )
+        # Note: LLMChain is deprecated, we'll use direct LLM invocation instead
     
     def needs_search(self, query: str) -> bool:
         """
@@ -297,16 +253,41 @@ class SearchChain:
             
             # Generate the answer using the user's OpenAI API key
             try:
-                response = self.search_chain.invoke({
-                    "question": question,
-                    "search_results": formatted_results,
-                    "chat_history": formatted_history,
-                    "language": language,
-                    "personality": strong_language_personality
-                })
-                
+                messages = [
+                    {"role": "system", "content": strong_language_personality},
+                    {"role": "user", "content": f"""
+                    User's question: {question}
+
+                    Search results:
+                    ---------------------
+                    {formatted_results}
+                    ---------------------
+
+                    Previous conversation:
+                    ---------------------
+                    {formatted_history}
+                    ---------------------
+
+                    Based on the search results and the conversation history, provide a comprehensive answer to the user's question.
+
+                    Guidelines:
+                    1. Cite your sources by mentioning the websites or Wikipedia articles you're referencing
+                    2. If the search results don't provide relevant information, say so and provide your best answer based on your knowledge
+                    3. Be concise but thorough
+                    4. If there are multiple perspectives on a topic, present them fairly
+
+                    Remember to respond in {language}.
+                    """}
+                ]
+
+                stream = self.llm.stream(messages)
+                full_response = ""
+                for chunk in stream:
+                    if chunk.content is not None:
+                        full_response += chunk.content
+
                 return {
-                    "answer": response["text"],
+                    "answer": full_response,
                     "search_results": search_results,
                     "is_url_processing": False,
                     "language": language  # Pass along the language preference
@@ -607,73 +588,58 @@ class SearchChain:
             role = "User" if msg["role"] == "user" else "Assistant"
             formatted_history += f"{role}: {msg['message']}\n"
         
-        # Create the prompt for determining search need
-        prompt_template = PromptTemplate(
-            input_variables=["query", "chat_history", "current_date", "language"],
-            template="""
-            You are a specialized AI designed to determine whether a web search would be helpful to answer a user's query.
-            
+        # Get the current date
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            # Get the decision from the model using direct invocation
+            messages = [
+                {"role": "system", "content": "You are a specialized AI designed to determine whether a web search would be helpful to answer a user's query."},
+                {"role": "user", "content": f"""
             Current date: {current_date}
             Language to use: {language}
-            
+
             User's query: {query}
-            
+
             Recent conversation:
             ---------------------
-            {chat_history}
+            {formatted_history}
             ---------------------
-            
+
             Please analyze this query and determine:
             1. If it's likely to need up-to-date information (news, current events, recent developments)
             2. If it's asking about specific facts that an AI model might not have training data on
             3. If it's asking about something time-sensitive or location-specific
             4. If it's about popular culture, sports, or current trends
             5. If it's about prices, availability, or other volatile information
-            
+
             First, classify the query into one of these categories:
             - DEFINITE_SEARCH: Query definitely requires web search (current events, specific facts not in training data)
             - LIKELY_SEARCH: Query would probably benefit from web search
             - NO_SEARCH: Query can be answered without web search (general knowledge, opinions, creative tasks)
-            
+
             Then, if search is needed, provide a reformulated search query optimized for web search engines.
-            
+
             Return your response in this JSON format:
             {{
               "search_needed": "DEFINITE_SEARCH|LIKELY_SEARCH|NO_SEARCH",
               "reasoning": "Brief explanation of your decision",
               "reformulated_query": "Optimized search query if search is needed"
             }}
-            
+
             IMPORTANT: Ensure that any reformulated query is appropriate for searching for content in {language}.
-            
+
             Only respond with the JSON. No other text.
-            """
-        )
-        
-        # Create the chain for determining search need
-        search_determination_chain = LLMChain(
-            llm=self.internal_llm,
-            prompt=prompt_template
-        )
-        
-        # Get the current date
-        from datetime import datetime
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        
-        try:
-            # Get the decision from the model
-            
-            response = search_determination_chain.invoke({
-                "query": query,
-                "chat_history": formatted_history,
-                "current_date": current_date,
-                "language": language
-            })
-            
+                """}
+            ]
+
+            response = self.internal_llm.invoke(messages)
+
             # Parse the response
             import json
             try:
-                result = json.loads(response["text"])
+                result = json.loads(response.content)
                 
                 if result["search_needed"] in ["DEFINITE_SEARCH", "LIKELY_SEARCH"]:
                     reformulated_query = result.get("reformulated_query", query)
