@@ -4,9 +4,10 @@
 
 const CONFIG = {
     // API URL - will be set based on environment
-    API_URL: window.location.hostname === 'localhost'
+    // For Railway deployment, set BACKEND_URL in HTML or use environment variable
+    API_URL: window.BACKEND_URL || (window.location.hostname === 'localhost'
         ? 'http://localhost:8000'
-        : window.location.origin.replace(/:\d+/, ':8000'),
+        : 'https://your-backend-name.railway.app'),  // Replace with your Railway backend URL
 
     // Default settings
     DEFAULT_MODEL: 'gpt-4o-mini',
