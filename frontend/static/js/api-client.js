@@ -50,7 +50,8 @@ class AzazelAPIClient {
                 language: options.language || 'English',
                 personality: options.personality || null,
                 chat_history: chatHistory,
-                use_rag: options.useRAG || false,
+                force_web_search: options.forceWebSearch || false,
+                force_document_mode: options.forceDocumentMode || false,
             }),
         });
 

@@ -34,7 +34,8 @@ class StreamChatRequest(BaseModel):
     language: Optional[str] = "English"
     personality: Optional[str] = None
     chat_history: Optional[List[ChatMessage]] = []
-    use_rag: Optional[bool] = False
+    force_web_search: Optional[bool] = False  # Force web search when checkbox is checked
+    force_document_mode: Optional[bool] = False  # Force RAG when checkbox is checked
 
 # Document Models
 class DocumentUploadRequest(BaseModel):

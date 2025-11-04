@@ -111,7 +111,7 @@ class AzazelApp {
         this.imageFileInput.addEventListener('change', (e) => this.handleImageUpload(e));
         this.audioFileInput.addEventListener('change', (e) => this.handleAudioUpload(e));
 
-        // Document mode toggle
+        // Document mode toggle - when checked, shows upload UI and forces RAG mode
         this.documentModeToggle.addEventListener('change', (e) => {
             this.documentUploadSection.classList.toggle('hidden', !e.target.checked);
         });
@@ -246,7 +246,16 @@ class AzazelApp {
                 assistantMessage = '';
                 const messageElement = this.addMessage('assistant', '');
 
-                for await (const chunk of this.apiClient.streamMessage(message, this.sessionId, apiKey, chatHistory)) {
+                // Get checkbox states
+                const forceWebSearch = this.webSearchToggle.checked;
+                const forceDocumentMode = this.documentModeToggle.checked;
+
+                for await (const chunk of this.apiClient.streamMessage(message, this.sessionId, apiKey, chatHistory, {
+                    language: this.getLanguage(),
+                    personality: this.getPersonalityPrompt(),
+                    forceWebSearch: forceWebSearch,
+                    forceDocumentMode: forceDocumentMode
+                })) {
                     assistantMessage += chunk;
                     this.updateMessage(messageElement, assistantMessage);
                 }

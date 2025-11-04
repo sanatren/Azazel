@@ -81,19 +81,27 @@ async def stream_message(request: StreamChatRequest):
                 for msg in request.chat_history
             ]
 
-            # 1. Check if we have documents - use RAG chain
+            # 1. Check if document mode is forced OR (documents exist AND query is relevant)
             rag_chain = get_rag_chain(request.api_key, request.session_id)
-            if rag_chain.has_documents_for_session(request.session_id):
-                if rag_chain.is_relevant_to_documents(request.message, request.session_id):
-                    result = rag_chain.answer_question(
-                        question=request.message,
-                        session_id=request.session_id,
-                        chat_history=chat_history,
-                        language=request.language
-                    )
-                    yield f"data: {json.dumps({'content': result['answer']})}\n\n"
-                    yield "data: [DONE]\n\n"
-                    return
+            should_use_rag = False
+
+            if request.force_document_mode:
+                # Force RAG mode when checkbox is checked
+                should_use_rag = True
+            elif rag_chain.has_documents_for_session(request.session_id):
+                # Auto-detect if query is relevant to documents
+                should_use_rag = rag_chain.is_relevant_to_documents(request.message, request.session_id)
+
+            if should_use_rag:
+                result = rag_chain.answer_question(
+                    question=request.message,
+                    session_id=request.session_id,
+                    chat_history=chat_history,
+                    language=request.language
+                )
+                yield f"data: {json.dumps({'content': result['answer']})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
 
             # 2. Check if it's a programming question
             prog_assistant = get_programming_assistant(request.api_key)
@@ -108,19 +116,27 @@ async def stream_message(request: StreamChatRequest):
                 yield "data: [DONE]\n\n"
                 return
 
-            # 3. Check if it needs web search
+            # 3. Check if web search is forced OR auto-detect need for web search
             search_chain = get_search_chain(
                 request.api_key,
                 settings.GOOGLE_API_KEY,
                 settings.GOOGLE_CSE_ID
             )
-            needs_search = search_chain.determine_search_need_with_llm(
-                query=request.message,
-                chat_history=chat_history,
-                language=request.language
-            )
 
-            if needs_search.get("needs_search", False):
+            needs_search = False
+            if request.force_web_search:
+                # Force web search when checkbox is checked
+                needs_search = True
+            else:
+                # Auto-detect if query needs web search (current events, real-time info, etc.)
+                search_determination = search_chain.determine_search_need_with_llm(
+                    query=request.message,
+                    chat_history=chat_history,
+                    language=request.language
+                )
+                needs_search = search_determination.get("needs_search", False)
+
+            if needs_search:
                 result = search_chain.search_with_web(
                     query=request.message,
                     chat_history=chat_history,
