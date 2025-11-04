@@ -441,13 +441,29 @@ class AzazelApp {
         const file = event.target.files[0];
         if (!file) return;
 
-        this.currentAttachment = {
-            type: 'image',
-            file: file,
-            name: file.name
-        };
+        const apiKey = this.apiKeyInput.value.trim();
+        if (!apiKey) {
+            alert('Please enter your OpenAI API key first');
+            return;
+        }
 
-        this.showAttachmentPreview('🖼️', file.name);
+        try {
+            this.statusText.textContent = `Uploading image ${file.name}...`;
+
+            // Upload image to server immediately (same as document upload)
+            const response = await this.apiClient.uploadDocument(file, this.sessionId, apiKey);
+
+            if (response.success) {
+                this.uploadedFiles.push(file);
+                this.renderUploadedFiles();
+                this.statusText.textContent = 'Image uploaded successfully';
+            }
+        } catch (error) {
+            console.error('Image upload error:', error);
+            alert(`Failed to upload image: ${error.message}`);
+            this.statusText.textContent = 'Ready to chat';
+        }
+
         event.target.value = ''; // Reset input
     }
 
@@ -501,7 +517,7 @@ class AzazelApp {
     }
 
     removeAttachment() {
-        this.currentAttachment = null;
+        // Removed currentAttachment - images are now uploaded immediately
         this.attachmentPreview.classList.add('hidden');
         this.imageFileInput.value = '';
         this.audioFileInput.value = '';
