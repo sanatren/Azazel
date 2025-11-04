@@ -17,41 +17,11 @@ from api.models.schemas import (
 )
 from Bot.programming_assistant import ProgrammingAssistant
 from Bot.audio_handler import AudioHandler
-from Bot.rag_chain import RAGChain
-from Bot.search_chain import SearchChain
 from langchain_openai import ChatOpenAI
 from api.core.config import settings
+from api.core.chain_manager import get_rag_chain, get_search_chain, get_programming_assistant
 
 router = APIRouter()
-
-# Store chain instances
-rag_chains = {}
-search_chains = {}
-programming_assistants = {}
-
-# Helper functions to get chain instances
-def get_rag_chain(api_key: str, session_id: str) -> RAGChain:
-    """Get or create RAG chain instance"""
-    key = f"{session_id}_{api_key[:10]}"
-    if key not in rag_chains:
-        rag_chains[key] = RAGChain(api_key)
-    return rag_chains[key]
-
-def get_search_chain(api_key: str) -> SearchChain:
-    """Get or create search chain instance"""
-    if api_key[:10] not in search_chains:
-        search_chains[api_key[:10]] = SearchChain(
-            api_key=api_key,
-            google_api_key=settings.GOOGLE_API_KEY,
-            google_cse_id=settings.GOOGLE_CSE_ID
-        )
-    return search_chains[api_key[:10]]
-
-def get_programming_assistant(api_key: str) -> ProgrammingAssistant:
-    """Get or create programming assistant instance"""
-    if api_key[:10] not in programming_assistants:
-        programming_assistants[api_key[:10]] = ProgrammingAssistant(api_key)
-    return programming_assistants[api_key[:10]]
 
 def get_assistant(api_key: str, model: str = "gpt-4o-mini"):
     """Get a chat assistant instance with user's API key"""
@@ -139,7 +109,11 @@ async def stream_message(request: StreamChatRequest):
                 return
 
             # 3. Check if it needs web search
-            search_chain = get_search_chain(request.api_key)
+            search_chain = get_search_chain(
+                request.api_key,
+                settings.GOOGLE_API_KEY,
+                settings.GOOGLE_CSE_ID
+            )
             needs_search = search_chain.determine_search_need_with_llm(
                 query=request.message,
                 chat_history=chat_history,

@@ -14,19 +14,10 @@ from api.models.schemas import (
     ClearDocumentsRequest, ClearDocumentsResponse,
     DocumentUploadResponse, ImageAnalysisRequest, ImageAnalysisResponse
 )
-from Bot.rag_chain import RAGChain
+from api.core.chain_manager import get_rag_chain
+from api.core import chain_manager
 
 router = APIRouter()
-
-# Store RAG chain instances per session (in production, use Redis or similar)
-rag_chains = {}
-
-def get_rag_chain(api_key: str, session_id: str) -> RAGChain:
-    """Get or create RAG chain instance"""
-    key = f"{session_id}_{api_key[:10]}"  # Use first 10 chars of API key as identifier
-    if key not in rag_chains:
-        rag_chains[key] = RAGChain(api_key)
-    return rag_chains[key]
 
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
@@ -106,9 +97,9 @@ async def clear_documents(request: ClearDocumentsRequest):
     try:
         # Clear from all RAG chain instances
         cleared = False
-        for key in list(rag_chains.keys()):
+        for key in list(chain_manager.rag_chains.keys()):
             if key.startswith(request.session_id):
-                rag_chain = rag_chains[key]
+                rag_chain = chain_manager.rag_chains[key]
                 rag_chain.clear_documents(request.session_id)
                 cleared = True
 
@@ -150,9 +141,9 @@ async def has_documents(session_id: str, api_key: str):
     """
     try:
         # Check if any RAG chain exists for this session
-        for key in rag_chains.keys():
+        for key in chain_manager.rag_chains.keys():
             if key.startswith(session_id):
-                rag_chain = rag_chains[key]
+                rag_chain = chain_manager.rag_chains[key]
                 has_docs = rag_chain.has_documents_for_session(session_id)
                 return {"has_documents": has_docs}
 
