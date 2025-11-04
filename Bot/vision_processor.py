@@ -40,11 +40,16 @@ class VisionProcessor:
             filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}.{file_extension}"
             permanent_path = os.path.join(self.image_folder, filename)
 
-            # Handle both FastAPI (read()) and Streamlit (getvalue())
-            file_content = uploaded_file.read() if hasattr(uploaded_file, 'read') else uploaded_file.getvalue()
+            # Get content using getvalue() or read()
+            if hasattr(uploaded_file, 'getvalue'):
+                file_content = uploaded_file.getvalue()
+            elif hasattr(uploaded_file, 'read'):
+                file_content = uploaded_file.read()
+            else:
+                raise ValueError("Uploaded file has no read() or getvalue() method")
 
             with open(permanent_path, "wb") as f:
-                f.write(file_content if isinstance(file_content, bytes) else file_content)
+                f.write(file_content)
 
             self.image_store[session_id].append(permanent_path)
             return True

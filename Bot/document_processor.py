@@ -60,12 +60,19 @@ class DocumentProcessor:
                 return self.vision_processor.process_image(uploaded_file, session_id)
 
             # Create a temporary file to save the uploaded file
-            # Handle both FastAPI (read()) and Streamlit (getvalue())
-            file_content = uploaded_file.read() if hasattr(uploaded_file, 'read') else uploaded_file.getvalue()
+            # Get file content - should already be bytes from our wrapper
             filename = getattr(uploaded_file, 'filename', getattr(uploaded_file, 'name', 'unknown'))
 
+            # Get content using getvalue() or read()
+            if hasattr(uploaded_file, 'getvalue'):
+                file_content = uploaded_file.getvalue()
+            elif hasattr(uploaded_file, 'read'):
+                file_content = uploaded_file.read()
+            else:
+                raise ValueError("Uploaded file has no read() or getvalue() method")
+
             with tempfile.NamedTemporaryFile(delete=False, suffix=f".{filename.split('.')[-1]}") as tmp_file:
-                tmp_file.write(file_content if isinstance(file_content, bytes) else file_content.read())
+                tmp_file.write(file_content)
                 file_path = tmp_file.name
             
             # Extract text based on file type

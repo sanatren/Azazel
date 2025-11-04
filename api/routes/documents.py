@@ -41,8 +41,26 @@ async def upload_document(
         # Get RAG chain
         rag_chain = get_rag_chain(api_key, session_id)
 
+        # Read file content asynchronously
+        file_content = await file.read()
+
+        # Create a wrapper object that works with the processor
+        class FileWrapper:
+            def __init__(self, content, filename, content_type):
+                self.content = content
+                self.filename = filename
+                self.content_type = content_type
+
+            def read(self):
+                return self.content
+
+            def getvalue(self):
+                return self.content
+
+        wrapped_file = FileWrapper(file_content, file.filename, file.content_type)
+
         # Process the file
-        success = rag_chain.process_file(file, session_id)
+        success = rag_chain.process_file(wrapped_file, session_id)
 
         if success:
             return DocumentUploadResponse(
