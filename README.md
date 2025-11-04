@@ -1,7 +1,9 @@
 # 🤖 [Azazel AI](https://brave-comfort-production-f62d.up.railway.app/) - Advanced AI Assistant
 
 Modern, full-featured AI assistant with beautiful ChatGPT-like interface, document processing, web search, and code execution.
+
 [Use azazel from here](https://brave-comfort-production-f62d.up.railway.app/)
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green.svg)
