@@ -134,7 +134,7 @@ async def stream_message(request: StreamChatRequest):
                     chat_history=chat_history,
                     language=request.language
                 )
-                needs_search = search_determination.get("needs_search", False)
+                needs_search = search_determination.get("search_needed", False)  # Fixed: was "needs_search"
 
             if needs_search:
                 result = search_chain.search_with_web(
