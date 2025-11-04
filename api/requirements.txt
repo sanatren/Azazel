@@ -27,6 +27,7 @@ faiss-cpu>=1.8.0
 google-api-python-client>=2.100.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
+wikipedia>=1.4.0
 
 # Image processing
 Pillow>=10.0.0
