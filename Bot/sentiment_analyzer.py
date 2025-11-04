@@ -1,9 +1,22 @@
+# NOTE: This file is only used by Streamlit app, not by the FastAPI backend
+# It requires torch and transformers which are heavy dependencies
+# The API deployment excludes this file
+
 import os
-import streamlit as st
 from typing import Dict, Any, List, Tuple
-from transformers import pipeline
-import torch
-import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Lazy imports to avoid loading heavy dependencies unless actually used
+try:
+    from transformers import pipeline
+    import torch
+    import numpy as np
+    DEPENDENCIES_AVAILABLE = True
+except ImportError:
+    logger.warning("Sentiment analyzer dependencies not available (torch, transformers)")
+    DEPENDENCIES_AVAILABLE = False
 
 class SentimentAnalyzer:
     """Analyze user sentiment and emotion to adjust chatbot responses"""
@@ -143,9 +156,9 @@ class SentimentAnalyzer:
                 "raw_sentiment": sentiment_dict,
                 "raw_emotion": emotion_dict
             }
-            
+
         except Exception as e:
-            st.error(f"Error analyzing sentiment: {str(e)}")
+            logger.error(f"Error analyzing sentiment: {str(e)}")
             return {
                 "sentiment": "neutral",
                 "sentiment_score": 0.5,

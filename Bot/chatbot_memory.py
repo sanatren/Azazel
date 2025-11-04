@@ -1,10 +1,12 @@
 import os
-import streamlit as st
+import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from supabase import create_client
+
+logger = logging.getLogger(__name__)
 
 # Constants
 MAX_HISTORY_LENGTH = 35  # Maximum number of messages to keep in memory
@@ -20,20 +22,18 @@ model = None  # Initialize as None
 
 session_data = {}
 
-def get_model(api_key):
+def get_model(api_key, selected_model_name="GPT-4"):
     """Get or create ChatOpenAI model with the given API key"""
     global model
     if model is None or model.openai_api_key != api_key:
-        # Get the selected model from session state if available
-        selected_model = "gpt-4"  # Default to GPT-4
-        if hasattr(st, 'session_state') and 'selected_model' in st.session_state:
-            model_map = {
-                "GPT-3.5 Turbo": "gpt-3.5-turbo",
-                "GPT-4": "gpt-4",
-                "GPT-4 Turbo": "gpt-4-turbo-preview",
-                "GPT-4o Mini": "gpt-4o-mini"
-            }
-            selected_model = model_map.get(st.session_state.selected_model, "gpt-4")
+        # Get the selected model from parameter or default to GPT-4
+        model_map = {
+            "GPT-3.5 Turbo": "gpt-3.5-turbo",
+            "GPT-4": "gpt-4",
+            "GPT-4 Turbo": "gpt-4-turbo-preview",
+            "GPT-4o Mini": "gpt-4o-mini"
+        }
+        selected_model = model_map.get(selected_model_name, "gpt-4")
             
         model = ChatOpenAI(
             model=selected_model, 
@@ -134,11 +134,7 @@ def delete_session(session_id):
         supabase.table("sessions").delete().eq("session_id", session_id).execute()
         if session_id in session_data:
             del session_data[session_id]
-        
-        # Reset the current_personality in session state when a session is deleted
-        if 'current_personality' in st.session_state:
-            st.session_state.current_personality = None
-            
+
         return True
     except Exception as e:
         print(f"Error deleting session: {e}")
@@ -155,30 +151,28 @@ def get_all_sessions():
         print(f"Error retrieving sessions: {e}")
         return []
 
-def invoke_with_language(session_id, messages, language="English"):
+def invoke_with_language(session_id, messages, language="English", api_key=None, selected_model="GPT-4"):
     """
     Invoke the language model with the specified language preference
-    
+
     Args:
         session_id: The session ID
         messages: The messages to send to the model
         language: The language to respond in
-        
+        api_key: Optional OpenAI API key (will use env var if not provided)
+        selected_model: The model to use (default: "GPT-4")
+
     Returns:
         str: The model's response
     """
     try:
-        # Get API key from environment
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Get API key from parameter or environment
         if not api_key:
-            api_key = st.session_state.get("openai_api_key")
-            
+            api_key = os.getenv("OPENAI_API_KEY")
+
         if not api_key:
-            st.error("OpenAI API key not found")
+            logger.error("OpenAI API key not found")
             return "Error: API key not found"
-        
-        # Get the selected model from session state
-        selected_model = st.session_state.get("selected_model", "GPT-4")
         model_name = {
              "GPT-3.5 Turbo": "gpt-3.5-turbo",
              "GPT-4": "gpt-4",
@@ -219,5 +213,5 @@ def invoke_with_language(session_id, messages, language="English"):
         # Return the response content
         return response.content
     except Exception as e:
-        st.error(f"Error invoking model: {str(e)}")
+        logger.error(f"Error invoking model: {str(e)}")
         return f"I'm having trouble generating a response right now. Error: {str(e)}"

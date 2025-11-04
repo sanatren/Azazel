@@ -2,12 +2,14 @@ import os
 import json
 import requests
 import wikipedia
-import streamlit as st
+import logging
 from typing import List, Dict, Any, Optional
 from googleapiclient.discovery import build
 from bs4 import BeautifulSoup
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -35,7 +37,7 @@ class WebSearchTool:
                 developerKey=self.google_api_key
             )
         except Exception as e:
-            st.warning(f"Failed to initialize Google Search API: {str(e)}")
+            logger.warning(f"Failed to initialize Google Search API: {str(e)}")
             self.google_service = None
     
     def google_search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:

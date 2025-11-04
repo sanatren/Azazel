@@ -35,12 +35,21 @@ class AzazelApp {
         this.temperatureSlider = document.getElementById('temperature-slider');
         this.tempValue = document.getElementById('temp-value');
         this.messageInput = document.getElementById('message-input');
+        this.personalitySelect = document.getElementById('personality-select');
+        this.languageSelect = document.getElementById('language-select');
 
         // Buttons
         this.sendBtn = document.getElementById('send-btn');
         this.newChatBtn = document.getElementById('new-chat-btn');
         this.clearChatBtn = document.getElementById('clear-chat-btn');
         this.mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        this.imageUploadBtn = document.getElementById('image-upload-btn');
+        this.audioUploadBtn = document.getElementById('audio-upload-btn');
+        this.removeAttachmentBtn = document.getElementById('remove-attachment-btn');
+
+        // File inputs
+        this.imageFileInput = document.getElementById('image-file-input');
+        this.audioFileInput = document.getElementById('audio-file-input');
 
         // Toggles
         this.webSearchToggle = document.getElementById('web-search-toggle');
@@ -54,6 +63,12 @@ class AzazelApp {
         this.documentUploadSection = document.getElementById('document-upload-section');
         this.fileUpload = document.getElementById('file-upload');
         this.uploadedFilesDiv = document.getElementById('uploaded-files');
+        this.attachmentPreview = document.getElementById('attachment-preview');
+        this.attachmentName = document.getElementById('attachment-name');
+        this.attachmentIcon = document.getElementById('attachment-icon');
+
+        // State for current attachment
+        this.currentAttachment = null;
     }
 
     attachEventListeners() {
@@ -79,11 +94,22 @@ class AzazelApp {
             this.tempValue.textContent = e.target.value;
             this.saveSettings();
         });
+        this.personalitySelect.addEventListener('change', () => this.saveSettings());
+        this.languageSelect.addEventListener('change', () => this.saveSettings());
 
         // Buttons
         this.newChatBtn.addEventListener('click', () => this.newChat());
         this.clearChatBtn.addEventListener('click', () => this.clearChat());
         this.mobileMenuBtn.addEventListener('click', () => this.toggleSidebar());
+
+        // Audio/Image upload buttons
+        this.imageUploadBtn.addEventListener('click', () => this.imageFileInput.click());
+        this.audioUploadBtn.addEventListener('click', () => this.audioFileInput.click());
+        this.removeAttachmentBtn.addEventListener('click', () => this.removeAttachment());
+
+        // File inputs
+        this.imageFileInput.addEventListener('change', (e) => this.handleImageUpload(e));
+        this.audioFileInput.addEventListener('change', (e) => this.handleAudioUpload(e));
 
         // Document mode toggle
         this.documentModeToggle.addEventListener('change', (e) => {
@@ -408,6 +434,95 @@ class AzazelApp {
         setTimeout(() => {
             this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
         }, 100);
+    }
+
+    // Audio/Image upload handlers
+    async handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        this.currentAttachment = {
+            type: 'image',
+            file: file,
+            name: file.name
+        };
+
+        this.showAttachmentPreview('🖼️', file.name);
+        event.target.value = ''; // Reset input
+    }
+
+    async handleAudioUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Show loading state
+        this.statusText.textContent = 'Transcribing audio...';
+
+        try {
+            const apiKey = this.apiKeyInput.value;
+            if (!apiKey) {
+                alert('Please enter your OpenAI API key first');
+                return;
+            }
+
+            // Transcribe audio
+            const formData = new FormData();
+            formData.append('audio', file);
+            formData.append('api_key', apiKey);
+
+            const response = await fetch(`${CONFIG.API_URL}/api/chat/transcribe`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to transcribe audio');
+            }
+
+            const result = await response.json();
+
+            // Set the transcribed text as the message
+            this.messageInput.value = result.transcript;
+            this.statusText.textContent = 'Audio transcribed successfully';
+
+        } catch (error) {
+            console.error('Audio transcription error:', error);
+            alert('Failed to transcribe audio: ' + error.message);
+            this.statusText.textContent = 'Ready to chat';
+        }
+
+        event.target.value = ''; // Reset input
+    }
+
+    showAttachmentPreview(icon, name) {
+        this.attachmentIcon.textContent = icon;
+        this.attachmentName.textContent = name;
+        this.attachmentPreview.classList.remove('hidden');
+    }
+
+    removeAttachment() {
+        this.currentAttachment = null;
+        this.attachmentPreview.classList.add('hidden');
+        this.imageFileInput.value = '';
+        this.audioFileInput.value = '';
+    }
+
+    getPersonalityPrompt() {
+        const personalities = {
+            'helpful': 'You are a helpful AI assistant.',
+            'professional': 'You are a professional AI assistant. Be formal, precise, and business-oriented in your responses.',
+            'friendly': 'You are a friendly AI assistant. Be warm, casual, and approachable in your responses.',
+            'concise': 'You are a concise AI assistant. Provide brief, to-the-point responses without unnecessary elaboration.',
+            'creative': 'You are a creative AI assistant. Think outside the box and provide imaginative, innovative solutions.',
+            'technical': 'You are a technical expert AI assistant. Provide detailed, accurate technical information with examples and best practices.'
+        };
+
+        const selected = this.personalitySelect.value;
+        return personalities[selected] || personalities['helpful'];
+    }
+
+    getLanguage() {
+        return this.languageSelect.value || 'English';
     }
 }
 

@@ -1,9 +1,11 @@
 import os
 from typing import Dict, Any, List
-import streamlit as st
+import logging
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from code_executor import CodeExecutor
+
+logger = logging.getLogger(__name__)
 
 class ProgrammingAssistant:
     """AI Programming Assistant that can execute Python code"""
@@ -229,11 +231,13 @@ class ProgrammingAssistant:
         # Get the first code block
         code = code_blocks[0]
 
-        # Check if code execution is disabled in session state
-        disable_execution = st.session_state.get("disable_code_execution", True)
+        # Code execution is disabled by default for security reasons
+        # This can be enabled by the calling code if needed
+        disable_execution = True
 
         if disable_execution:
             # Skip execution if disabled
+            logger.info("Code execution is disabled by default for security")
             return {
                 "answer": response.content,
                 "code": code,

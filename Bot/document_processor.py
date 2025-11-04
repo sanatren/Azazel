@@ -1,7 +1,7 @@
 # Fix the missing client attribute in DocumentProcessor
 import os
 import tempfile
-import streamlit as st
+import logging
 from typing import List, Dict, Any, Optional
 import docx
 from pptx import Presentation
@@ -11,6 +11,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from vision_processor import VisionProcessor
+
+logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """Process various document types for RAG applications"""
@@ -75,14 +77,14 @@ class DocumentProcessor:
             elif file_extension == 'txt':
                 text = self._extract_text_from_txt(file_path)
             else:
-                st.error(f"Unsupported file type: {file_extension}")
+                logger.error(f"Unsupported file type: {file_extension}")
                 return False
             
             # Clean up the temporary file
             os.unlink(file_path)
             
             if not text:
-                st.warning(f"No text could be extracted from {uploaded_file.name}")
+                logger.warning(f"No text could be extracted from {uploaded_file.name}")
                 return False
             
             # Split the text into chunks
@@ -113,7 +115,7 @@ class DocumentProcessor:
             
             return True
         except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
+            logger.error(f"Error processing file: {str(e)}")
             return False
     
     def _extract_text_from_pdf(self, file_path: str) -> str:
@@ -125,7 +127,7 @@ class DocumentProcessor:
                     text += page.extract_text() or ""
             return text
         except Exception as e:
-            st.error(f"Error extracting text from PDF: {str(e)}")
+            logger.error(f"Error extracting text from PDF: {str(e)}")
             return ""
     
     def _extract_text_from_docx(self, file_path: str) -> str:
@@ -134,7 +136,7 @@ class DocumentProcessor:
             doc = docx.Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
         except Exception as e:
-            st.error(f"Error extracting text from Word document: {str(e)}")
+            logger.error(f"Error extracting text from Word document: {str(e)}")
             return ""
     
     def _extract_text_from_excel(self, file_path: str) -> str:
@@ -143,7 +145,7 @@ class DocumentProcessor:
             df = pd.read_excel(file_path)
             return df.to_string()
         except Exception as e:
-            st.error(f"Error extracting text from Excel file: {str(e)}")
+            logger.error(f"Error extracting text from Excel file: {str(e)}")
             return ""
     
     def _extract_text_from_pptx(self, file_path: str) -> str:
@@ -157,7 +159,7 @@ class DocumentProcessor:
                         text += shape.text + "\n"
             return text
         except Exception as e:
-            st.error(f"Error extracting text from PowerPoint: {str(e)}")
+            logger.error(f"Error extracting text from PowerPoint: {str(e)}")
             return ""
     
     def _extract_text_from_txt(self, file_path: str) -> str:
@@ -166,7 +168,7 @@ class DocumentProcessor:
             with open(file_path, 'r', encoding='utf-8') as file:
                 return file.read()
         except Exception as e:
-            st.error(f"Error extracting text from text file: {str(e)}")
+            logger.error(f"Error extracting text from text file: {str(e)}")
             return ""
     
     def query_documents(self, query: str, session_id: str, k: int = 8) -> List[Dict[str, Any]]:
@@ -215,7 +217,7 @@ class DocumentProcessor:
             
             return docs
         except Exception as e:
-            st.error(f"Error querying documents: {str(e)}")
+            logger.error(f"Error querying documents: {str(e)}")
             return []
     
     def has_documents(self, session_id: str) -> bool:

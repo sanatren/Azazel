@@ -1,12 +1,14 @@
 # vision_processor.py
 import os
 import base64
-import streamlit as st
+import logging
 import tempfile
 from openai import OpenAI
 from typing import List, Dict, Any
 import uuid
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 class VisionProcessor:
     """Process images and integrate with GPT-4o's vision capabilities"""
@@ -23,7 +25,7 @@ class VisionProcessor:
             with open(image_path, "rb") as image_file:
                 return base64.b64encode(image_file.read()).decode('utf-8')
         except Exception as e:
-            st.error(f"Error encoding image: {str(e)}")
+            logger.error(f"Error encoding image: {str(e)}")
             return ""
 
     def process_image(self, uploaded_file, session_id: str) -> bool:
@@ -42,7 +44,7 @@ class VisionProcessor:
             self.image_store[session_id].append(permanent_path)
             return True
         except Exception as e:
-            st.error(f"Error processing image: {str(e)}")
+            logger.error(f"Error processing image: {str(e)}")
             return False
 
     def analyze_images(self, session_id: str, query: str) -> List[Dict[str, Any]]:
@@ -74,7 +76,7 @@ class VisionProcessor:
         except Exception as e:
             error_message = str(e)
             if "quota" in error_message.lower() or "rate limit" in error_message.lower():
-                st.error(f"Vision API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
+                logger.error(f"Vision API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
             else:
-                st.error(f"Vision API error: {error_message}")
+                logger.error(f"Vision API error: {error_message}")
             return []

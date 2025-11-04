@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any, List
-import streamlit as st
+import logging
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from web_search import WebSearchTool
@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import re
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -46,18 +48,19 @@ class SearchChain:
         
         # Note: LLMChain is deprecated, we'll use direct LLM invocation instead
     
-    def needs_search(self, query: str) -> bool:
+    def needs_search(self, query: str, force_search: bool = False) -> bool:
         """
         Determine if a query needs a web search
-        
+
         Args:
             query: The user's query
-            
+            force_search: If True, always use web search
+
         Returns:
             bool: True if the query needs a web search, False otherwise
         """
-        # If force_search is enabled in session state, always use web search
-        if st.session_state.get("force_search", False):
+        # If force_search is enabled, always use web search
+        if force_search:
             return True
         
         # List of keywords that strongly indicate a need for web search
@@ -208,24 +211,24 @@ class SearchChain:
         """
         # Check if the question contains a URL
         is_url_question = self.is_url(question)
-        st.info(f"URL detection: {'URL detected' if is_url_question else 'No URL detected'}")
-        
+        logger.info(f"URL detection: {'URL detected' if is_url_question else 'No URL detected'}")
+
         if is_url_question:
             try:
                 url = self.extract_url(question)
-                st.info(f"Processing URL: {url}")
+                logger.info(f"Processing URL: {url}")
                 
                 # Extract content from the URL
                 content = self.web_search_tool.extract_content_from_url(url)
-                
+
                 if not content or content.startswith("Error extracting content"):
-                    st.warning(f"Failed to extract content from URL: {url}")
+                    logger.warning(f"Failed to extract content from URL: {url}")
                     # Fall back to regular search if content extraction fails
                     return self._perform_regular_search(question, chat_history, language)
-                
+
                 return self.process_url(url, question, chat_history, language)
             except Exception as e:
-                st.error(f"Error processing URL: {str(e)}")
+                logger.error(f"Error processing URL: {str(e)}")
                 # Fall back to regular search if URL processing fails
                 return self._perform_regular_search(question, chat_history, language)
         
@@ -234,7 +237,7 @@ class SearchChain:
 
     def _perform_regular_search(self, question: str, chat_history: List[Dict[str, str]], language: str) -> Dict[str, Any]:
         """Helper method to perform a regular search"""
-        st.info("Performing web search")
+        logger.info("Performing web search")
         try:
             # Perform the search
             search_results = self.web_search_tool.search(question)
@@ -295,7 +298,7 @@ class SearchChain:
             except Exception as e:
                 error_message = str(e)
                 if "quota" in error_message.lower() or "rate limit" in error_message.lower():
-                    st.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
+                    logger.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
                     return {
                         "answer": "I found some information through web search, but I couldn't process it due to API usage limits with your OpenAI API key. I can still show you the search results I found.",
                         "search_results": search_results,
@@ -304,7 +307,7 @@ class SearchChain:
                         "language": language  # Pass along the language preference
                     }
                 else:
-                    st.error(f"Error generating search response: {error_message}")
+                    logger.error(f"Error generating search response: {error_message}")
                     return {
                         "answer": f"I found some information through web search, but encountered an error while processing it: {error_message}. Here are the raw search results I found.",
                         "search_results": search_results,
@@ -313,7 +316,7 @@ class SearchChain:
                         "language": language  # Pass along the language preference
                     }
         except Exception as e:
-            st.error(f"Error performing web search: {str(e)}")
+            logger.error(f"Error performing web search: {str(e)}")
             return {
                 "answer": f"I encountered an error while searching the web: {str(e)}. Let me try to answer based on what I know.",
                 "search_results": None,
@@ -434,7 +437,7 @@ class SearchChain:
             }
             
         except Exception as e:
-            st.error(f"Error processing URL: {str(e)}")
+            logger.error(f"Error processing URL: {str(e)}")
             return {
                 "answer": f"I encountered an error while processing the URL: {str(e)}. Let me try to answer based on what I know.",
                 "url": url,
@@ -483,7 +486,7 @@ class SearchChain:
             try:
                 search_results = self.web_search_tool.search(improved_query)
             except Exception as e:
-                st.error(f"Error performing web search: {str(e)}")
+                logger.error(f"Error performing web search: {str(e)}")
                 return {
                     "answer": f"I determined that web search would be helpful for this query, but encountered an error: {str(e)}. Let me try to answer based on what I know.",
                     "search_results": None,
@@ -539,7 +542,7 @@ class SearchChain:
             except Exception as e:
                 error_message = str(e)
                 if "quota" in error_message.lower() or "rate limit" in error_message.lower():
-                    st.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
+                    logger.error(f"OpenAI API quota exceeded. Please check your API key limits or try again later.")
                     return {
                         "answer": "I found some information through web search, but I couldn't process it due to API usage limits with your OpenAI API key. I can still show you the search results I found.",
                         "search_results": search_results,
@@ -549,7 +552,7 @@ class SearchChain:
                         "language": language
                     }
                 else:
-                    st.error(f"Error generating search response: {error_message}")
+                    logger.error(f"Error generating search response: {error_message}")
                     return {
                         "answer": f"I found some information through web search, but encountered an error while processing it: {error_message}. Here are the raw search results I found.",
                         "search_results": search_results,
@@ -559,7 +562,7 @@ class SearchChain:
                         "language": language
                     }
         except Exception as e:
-            st.error(f"Error in web search determination: {str(e)}")
+            logger.error(f"Error in web search determination: {str(e)}")
             return {
                 "answer": f"I encountered an error while determining whether web search is needed: {str(e)}. Let me try to answer based on what I know.",
                 "search_results": None,
@@ -657,7 +660,7 @@ class SearchChain:
                         "language": language  # Add language to return value
                     }
             except json.JSONDecodeError:
-                st.warning(f"Failed to parse LLM response as JSON. Using heuristic determination instead.")
+                logger.warning(f"Failed to parse LLM response as JSON. Using heuristic determination instead.")
                 # Fall back to the original needs_search method
                 search_needed = self.needs_search(query)
                 return {
@@ -667,7 +670,7 @@ class SearchChain:
                     "language": language  # Add language to return value
                 }
         except Exception as e:
-            st.warning(f"Error determining search need with LLM: {str(e)}. Falling back to heuristic method.")
+            logger.warning(f"Error determining search need with LLM: {str(e)}. Falling back to heuristic method.")
             # Fall back to the original needs_search method
             search_needed = self.needs_search(query)
             return {

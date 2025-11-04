@@ -1,11 +1,11 @@
 """
 Chat API routes
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import sys
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import json
 
 # Add parent directory to path to import Bot modules
@@ -16,6 +16,7 @@ from api.models.schemas import (
     CodeExecutionRequest, CodeExecutionResponse
 )
 from Bot.programming_assistant import ProgrammingAssistant
+from Bot.audio_handler import AudioHandler
 from langchain_openai import ChatOpenAI
 
 router = APIRouter()
@@ -140,5 +141,41 @@ async def execute_code(request: CodeExecutionRequest):
             code_executed=result["code_executed"]
         )
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    api_key: str = Form(...)
+):
+    """
+    Transcribe audio to text using OpenAI Whisper
+    """
+    try:
+        # Validate file type
+        allowed_types = ["audio/wav", "audio/mp3", "audio/mpeg", "audio/m4a", "audio/x-m4a"]
+        if audio.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid audio file type. Supported: WAV, MP3, M4A")
+
+        # Initialize audio handler
+        handler = AudioHandler(api_key)
+
+        # Read audio file bytes
+        audio_bytes = await audio.read()
+
+        # Get file extension
+        file_extension = audio.filename.split('.')[-1].lower()
+
+        # Transcribe
+        transcript = handler.transcribe_audio_bytes(audio_bytes, file_extension)
+
+        if transcript is None:
+            raise HTTPException(status_code=500, detail="Failed to transcribe audio")
+
+        return {"transcript": transcript}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

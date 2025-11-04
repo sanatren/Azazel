@@ -2,10 +2,12 @@ import sys
 import io
 import traceback
 import ast
-import streamlit as st
+import logging
 from contextlib import redirect_stdout, redirect_stderr
 import threading
 import time
+
+logger = logging.getLogger(__name__)
 
 class CodeExecutor:
     """Execute Python code in a controlled environment"""

@@ -1,9 +1,11 @@
 import os
 from typing import List, Dict, Any
-import streamlit as st
+import logging
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from document_processor import DocumentProcessor
+
+logger = logging.getLogger(__name__)
 
 class RAGChain:
     """Retrieval-Augmented Generation chain with multimodal support"""
@@ -108,14 +110,14 @@ class RAGChain:
         except Exception as e:
             error_message = str(e)
             if "quota" in error_message.lower() or "rate limit" in error_message.lower():
-                st.error(f"API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
+                logger.error(f"API quota exceeded for your API key. Please check your OpenAI account limits or try again later.")
                 return {
                     "answer": "I'm sorry, but I couldn't analyze the documents or images due to API usage limits. Please try again later or try a different question that doesn't require document or image analysis.",
                     "sources": [],
                     "image_analysis": []
                 }
             else:
-                st.error(f"Error in RAG processing: {error_message}")
+                logger.error(f"Error in RAG processing: {error_message}")
                 return {
                     "answer": f"I encountered an error while processing your documents: {error_message}. Let me try to answer based on what I know.",
                     "sources": [],
