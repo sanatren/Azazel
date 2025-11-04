@@ -40,6 +40,7 @@ async def upload_document(
             def __init__(self, content, filename, content_type):
                 self.content = content
                 self.filename = filename
+                self.name = filename  # Add name attribute for Streamlit compatibility
                 self.content_type = content_type
 
             def read(self):
