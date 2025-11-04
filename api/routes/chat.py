@@ -17,11 +17,42 @@ from api.models.schemas import (
 )
 from Bot.programming_assistant import ProgrammingAssistant
 from Bot.audio_handler import AudioHandler
+from Bot.rag_chain import RAGChain
+from Bot.search_chain import SearchChain
 from langchain_openai import ChatOpenAI
+from api.core.config import settings
 
 router = APIRouter()
 
-# Initialize assistant instances (will be created per request with user's API key)
+# Store chain instances
+rag_chains = {}
+search_chains = {}
+programming_assistants = {}
+
+# Helper functions to get chain instances
+def get_rag_chain(api_key: str, session_id: str) -> RAGChain:
+    """Get or create RAG chain instance"""
+    key = f"{session_id}_{api_key[:10]}"
+    if key not in rag_chains:
+        rag_chains[key] = RAGChain(api_key)
+    return rag_chains[key]
+
+def get_search_chain(api_key: str) -> SearchChain:
+    """Get or create search chain instance"""
+    if api_key[:10] not in search_chains:
+        search_chains[api_key[:10]] = SearchChain(
+            api_key=api_key,
+            google_api_key=settings.GOOGLE_API_KEY,
+            google_cse_id=settings.GOOGLE_CSE_ID
+        )
+    return search_chains[api_key[:10]]
+
+def get_programming_assistant(api_key: str) -> ProgrammingAssistant:
+    """Get or create programming assistant instance"""
+    if api_key[:10] not in programming_assistants:
+        programming_assistants[api_key[:10]] = ProgrammingAssistant(api_key)
+    return programming_assistants[api_key[:10]]
+
 def get_assistant(api_key: str, model: str = "gpt-4o-mini"):
     """Get a chat assistant instance with user's API key"""
     return ChatOpenAI(
@@ -69,37 +100,83 @@ async def send_message(request: ChatRequest):
 @router.post("/stream")
 async def stream_message(request: StreamChatRequest):
     """
-    Stream a chat response
+    Smart chat router that streams responses using appropriate chain
+    Routes to: RAG → Programming → Search → Basic Chat
     """
     async def generate() -> AsyncGenerator[str, None]:
         try:
-            # Initialize assistant with user's API key
-            assistant = get_assistant(request.api_key)
+            # Convert chat history to dict format
+            chat_history = [
+                {"role": msg.role, "message": msg.message}
+                for msg in request.chat_history
+            ]
 
-            # Create messages
+            # 1. Check if we have documents - use RAG chain
+            rag_chain = get_rag_chain(request.api_key, request.session_id)
+            if rag_chain.has_documents_for_session(request.session_id):
+                if rag_chain.is_relevant_to_documents(request.message, request.session_id):
+                    result = rag_chain.answer_question(
+                        question=request.message,
+                        session_id=request.session_id,
+                        chat_history=chat_history,
+                        language=request.language
+                    )
+                    yield f"data: {json.dumps({'content': result['answer']})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+            # 2. Check if it's a programming question
+            prog_assistant = get_programming_assistant(request.api_key)
+            if prog_assistant.is_programming_question(request.message):
+                result = prog_assistant.answer_programming_question(
+                    question=request.message,
+                    chat_history=chat_history,
+                    language=request.language,
+                    personality=request.personality or "You are a helpful programming assistant."
+                )
+                yield f"data: {json.dumps({'content': result['answer']})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # 3. Check if it needs web search
+            search_chain = get_search_chain(request.api_key)
+            needs_search = search_chain.determine_search_need_with_llm(
+                query=request.message,
+                chat_history=chat_history,
+                language=request.language
+            )
+
+            if needs_search.get("needs_search", False):
+                result = search_chain.search_with_web(
+                    query=request.message,
+                    chat_history=chat_history,
+                    language=request.language
+                )
+                yield f"data: {json.dumps({'content': result.get('answer', '')})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # 4. Fall back to basic chat
+            assistant = get_assistant(request.api_key)
             messages = []
 
-            # Add system message if personality is provided
             if request.personality:
                 messages.append({
                     "role": "system",
                     "content": request.personality + f"\n\nCRITICAL: You must respond in {request.language}."
                 })
 
-            # Add chat history
-            for msg in request.chat_history[-10:]:  # Last 10 messages
+            for msg in request.chat_history[-10:]:
                 messages.append({
                     "role": msg.role,
                     "content": msg.message
                 })
 
-            # Add current user message
             messages.append({
                 "role": "user",
                 "content": request.message
             })
 
-            # Stream response
             for chunk in assistant.stream(messages):
                 if chunk.content:
                     yield f"data: {json.dumps({'content': chunk.content})}\n\n"
