@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 import logging
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from document_processor import DocumentProcessor
+from Bot.document_processor import DocumentProcessor
 
 logger = logging.getLogger(__name__)
 

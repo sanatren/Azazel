@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
-from vision_processor import VisionProcessor
+from Bot.vision_processor import VisionProcessor
 
 logger = logging.getLogger(__name__)
 

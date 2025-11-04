@@ -3,7 +3,7 @@ from typing import Dict, Any, List
 import logging
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from web_search import WebSearchTool
+from Bot.web_search import WebSearchTool
 from dotenv import load_dotenv
 import re
 import requests
