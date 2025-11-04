@@ -193,84 +193,34 @@ class AzazelApp {
         this.statusText.textContent = 'Thinking...';
 
         try {
-            // Get features
-            const webSearch = this.webSearchToggle.checked;
-            const codeExecution = this.codeExecutionToggle.checked;
-            const documentMode = this.documentModeToggle.checked;
-
-            let response;
-            let assistantMessage = '';
-
             // Create typing indicator
             const typingId = this.addTypingIndicator();
 
-            if (documentMode && this.uploadedFiles.length > 0) {
-                // Use RAG
-                response = await this.apiClient.sendMessage(message, this.sessionId, apiKey, {
-                    useRAG: true
-                });
-                assistantMessage = response.response;
+            // Always use smart backend routing via streaming endpoint
+            const chatHistory = this.messages.map(m => ({
+                role: m.role,
+                message: m.content
+            }));
 
-            } else if (webSearch) {
-                // Use web search
-                const chatHistory = this.messages.map(m => ({
-                    role: m.role,
-                    message: m.content
-                }));
-                response = await this.apiClient.searchWeb(message, this.sessionId, apiKey, chatHistory);
-                assistantMessage = response.answer;
+            let assistantMessage = '';
+            const messageElement = this.addMessage('assistant', '');
 
-            } else if (codeExecution) {
-                // Check if code execution
-                const chatHistory = this.messages.map(m => ({
-                    role: m.role,
-                    message: m.content
-                }));
-                response = await this.apiClient.executeCode(message, this.sessionId, apiKey, chatHistory);
-                assistantMessage = response.answer;
+            // Get checkbox states - these tell backend to FORCE certain modes
+            const forceWebSearch = this.webSearchToggle.checked;
+            const forceDocumentMode = this.documentModeToggle.checked;
 
-                if (response.code) {
-                    assistantMessage += `\n\n\`\`\`python\n${response.code}\n\`\`\``;
-                }
-                if (response.execution_result) {
-                    assistantMessage += `\n\n**Output:**\n\`\`\`\n${response.execution_result}\n\`\`\``;
-                }
-
-            } else {
-                // Regular streaming chat
-                const chatHistory = this.messages.map(m => ({
-                    role: m.role,
-                    message: m.content
-                }));
-
-                assistantMessage = '';
-                const messageElement = this.addMessage('assistant', '');
-
-                // Get checkbox states
-                const forceWebSearch = this.webSearchToggle.checked;
-                const forceDocumentMode = this.documentModeToggle.checked;
-
-                for await (const chunk of this.apiClient.streamMessage(message, this.sessionId, apiKey, chatHistory, {
-                    language: this.getLanguage(),
-                    personality: this.getPersonalityPrompt(),
-                    forceWebSearch: forceWebSearch,
-                    forceDocumentMode: forceDocumentMode
-                })) {
-                    assistantMessage += chunk;
-                    this.updateMessage(messageElement, assistantMessage);
-                }
-
-                this.removeTypingIndicator(typingId);
-                this.statusText.textContent = 'Ready to chat';
-                this.sendBtn.disabled = false;
-                this.saveMessages();
-                this.scrollToBottom();
-                return;
+            // Backend will auto-detect: RAG → Programming → Web Search → Basic Chat
+            for await (const chunk of this.apiClient.streamMessage(message, this.sessionId, apiKey, chatHistory, {
+                language: this.getLanguage(),
+                personality: this.getPersonalityPrompt(),
+                forceWebSearch: forceWebSearch,
+                forceDocumentMode: forceDocumentMode
+            })) {
+                assistantMessage += chunk;
+                this.updateMessage(messageElement, assistantMessage);
             }
 
-            // Remove typing indicator and add message
             this.removeTypingIndicator(typingId);
-            this.addMessage('assistant', assistantMessage);
 
         } catch (error) {
             console.error('Error:', error);
