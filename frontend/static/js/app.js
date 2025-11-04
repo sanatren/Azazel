@@ -111,10 +111,8 @@ class AzazelApp {
         this.imageFileInput.addEventListener('change', (e) => this.handleImageUpload(e));
         this.audioFileInput.addEventListener('change', (e) => this.handleAudioUpload(e));
 
-        // Document mode toggle - when checked, shows upload UI and forces RAG mode
-        this.documentModeToggle.addEventListener('change', (e) => {
-            this.documentUploadSection.classList.toggle('hidden', !e.target.checked);
-        });
+        // Document upload is always visible
+        // Document mode checkbox now only forces RAG mode when checked
 
         // File upload
         this.fileUpload.addEventListener('change', (e) => this.handleFileUpload(e));
