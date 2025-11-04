@@ -45,26 +45,31 @@ class DocumentProcessor:
     def process_file(self, uploaded_file, session_id: str) -> bool:
         """
         Process an uploaded file and store its contents in the vector database
-        
+
         Args:
-            uploaded_file: The uploaded file object from Streamlit
+            uploaded_file: The uploaded file object (FastAPI UploadFile or Streamlit UploadedFile)
             session_id: The session ID to associate with the document
-            
+
         Returns:
             bool: True if processing was successful, False otherwise
         """
         try:
-            # Check if file is image
-            if uploaded_file.type.startswith('image/'):
+            # Check if file is image - handle both FastAPI (content_type) and Streamlit (type)
+            file_type = getattr(uploaded_file, 'content_type', getattr(uploaded_file, 'type', ''))
+            if file_type.startswith('image/'):
                 return self.vision_processor.process_image(uploaded_file, session_id)
-            
+
             # Create a temporary file to save the uploaded file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
+            # Handle both FastAPI (read()) and Streamlit (getvalue())
+            file_content = uploaded_file.read() if hasattr(uploaded_file, 'read') else uploaded_file.getvalue()
+            filename = getattr(uploaded_file, 'filename', getattr(uploaded_file, 'name', 'unknown'))
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{filename.split('.')[-1]}") as tmp_file:
+                tmp_file.write(file_content if isinstance(file_content, bytes) else file_content.read())
                 file_path = tmp_file.name
             
             # Extract text based on file type
-            file_extension = uploaded_file.name.split('.')[-1].lower()
+            file_extension = filename.split('.')[-1].lower()
             
             if file_extension == 'pdf':
                 text = self._extract_text_from_pdf(file_path)

@@ -34,13 +34,18 @@ class VisionProcessor:
             if session_id not in self.image_store:
                 self.image_store[session_id] = []
 
-            file_extension = uploaded_file.name.split('.')[-1]
+            # Handle both FastAPI (filename) and Streamlit (name)
+            file_name = getattr(uploaded_file, 'filename', getattr(uploaded_file, 'name', 'image.jpg'))
+            file_extension = file_name.split('.')[-1]
             filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}.{file_extension}"
             permanent_path = os.path.join(self.image_folder, filename)
-            
+
+            # Handle both FastAPI (read()) and Streamlit (getvalue())
+            file_content = uploaded_file.read() if hasattr(uploaded_file, 'read') else uploaded_file.getvalue()
+
             with open(permanent_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
-            
+                f.write(file_content if isinstance(file_content, bytes) else file_content)
+
             self.image_store[session_id].append(permanent_path)
             return True
         except Exception as e:

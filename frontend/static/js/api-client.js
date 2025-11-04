@@ -130,7 +130,8 @@ class AzazelAPIClient {
         });
 
         if (!response.ok) {
-            throw new Error(`API error: ${response.statusText}`);
+            const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(`API error: ${errorData.detail || response.statusText}`);
         }
 
         return await response.json();
