@@ -25,11 +25,15 @@ COPY Bot /app/Bot
 # Copy API code
 COPY api /app/api
 
+# Copy and set permissions for entrypoint script
+COPY api/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Set Python path
 ENV PYTHONPATH=/app
 
 # Expose port (Railway will set PORT env variable)
 EXPOSE 8000
 
-# Run the application using Python entrypoint script
-CMD ["python", "api/start.py"]
+# Run the application using bash entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]
