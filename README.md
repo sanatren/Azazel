@@ -180,7 +180,6 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 
-<div align="center">
 
 **Built with ❤️ for the AI community**
 
